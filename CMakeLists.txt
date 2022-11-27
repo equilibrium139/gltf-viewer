@@ -7,9 +7,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(gltf-viewer src/Main.cpp
-                           src/json.hpp
-                           src/stb_image.h
-                           src/stb_image_write.h
-                           src/tiny_gltf.cpp
-                           src/tiny_gltf.h
+						   src/glad.cpp
+						   src/tiny_gltf.cpp
 )
+
+find_package(glfw3 CONFIG REQUIRED)
+
+target_include_directories(gltf-viewer PRIVATE include)
+target_link_libraries(gltf-viewer PRIVATE glfw)

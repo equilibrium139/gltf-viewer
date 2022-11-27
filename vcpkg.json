@@ -1,0 +1,7 @@
+{
+    "name": "gltf-viewer",
+    "version": "0.1.0",
+    "dependencies": [
+        "glfw3"
+    ]
+}
