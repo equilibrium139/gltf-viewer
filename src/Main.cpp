@@ -11,29 +11,6 @@ std::string warn;
 
 int main(int argc, char** argv)
 {
-	GLFWwindow* window;
-
-    /* Initialize the library */
-    if (!glfwInit())
-        return -1;
-
-    /* Create a windowed mode window and its OpenGL context */
-    window = glfwCreateWindow(640, 480, "Hello World", NULL, NULL);
-    if (!window)
-    {
-        glfwTerminate();
-        return -1;
-    }
-
-    /* Make the window's context current */
-    glfwMakeContextCurrent(window);
-
-	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
-	{
-		printf("Failed to initialize GLAD\n");
-		return -1;
-	}    
-
     bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, argv[1]);
     //bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, argv[1]); // for binary glTF(.glb)
 
@@ -50,16 +27,87 @@ int main(int argc, char** argv)
         return -1;
     }
 
-    /* Loop until the user closes the window */
+
+    if (!glfwInit())
+        return -1;
+
+    const char* glsl_version = "#version 330";
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    Scene& scene = model.scenes[model.defaultScene];
+	GLFWwindow* window = glfwCreateWindow(640, 480, scene.name.c_str(), NULL, NULL);
+
+    if (!window)
+    {
+        glfwTerminate();
+        return -1;
+    }
+
+    glfwMakeContextCurrent(window);
+
+	if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+	{
+		printf("Failed to initialize GLAD\n");
+		return -1;
+	}    
+
+    Node& node = model.nodes[scene.nodes[0]];
+    Mesh& mesh = model.meshes[node.mesh];
+    Primitive& primitive = mesh.primitives[0];
+    int accessorIdx = primitive.attributes["POSITION"];
+    Accessor& accessor = model.accessors[accessorIdx];
+    BufferView& bufferView = model.bufferViews[accessor.bufferView];
+    Buffer& buffer = model.buffers[bufferView.buffer];
+
+    GLuint VAO;
+    glGenVertexArrays(1, &VAO);
+    glBindVertexArray(VAO);
+
+    GLuint VBO;
+    glGenBuffers(1, &VBO);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, buffer.data.size(), buffer.data.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, GetNumComponentsInType(accessor.type), accessor.componentType, GL_TRUE, accessor.ByteStride(bufferView), (const void*)(bufferView.byteOffset + accessor.byteOffset));
+
+    const char* vsSource =
+    R"(#version 330 core
+       layout(location = 0) in vec3 aPos;
+       void main()
+       {
+            gl_Position = vec4(aPos, 1.0);
+       })";
+    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vs, 1, &vsSource, 0);
+    glCompileShader(vs);
+
+    const char* fsSource =
+    R"(#version 330 core
+        out vec4 color;
+        void main()
+        {
+            color = vec4(1.0, 0.0, 0.0, 1.0);
+        })";
+    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fs, 1, &fsSource, 0);
+    glCompileShader(fs);
+
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+    glLinkProgram(program);
+    glUseProgram(program);
+
     while (!glfwWindowShouldClose(window))
     {
-        /* Render here */
         glClear(GL_COLOR_BUFFER_BIT);
 
-        /* Swap front and back buffers */
+        glDrawArrays(primitive.mode, bufferView.byteOffset, accessor.count);
+
         glfwSwapBuffers(window);
 
-        /* Poll for and process events */
         glfwPollEvents();
     }
 
