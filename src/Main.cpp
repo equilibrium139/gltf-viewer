@@ -9,6 +9,9 @@ TinyGLTF loader;
 std::string err;
 std::string warn;
 
+int windowWidth = 800;
+int windowHeight = 600;
+
 int main(int argc, char** argv)
 {
     bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, argv[1]);
@@ -37,7 +40,7 @@ int main(int argc, char** argv)
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     Scene& scene = model.scenes[model.defaultScene];
-	GLFWwindow* window = glfwCreateWindow(640, 480, scene.name.c_str(), NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, scene.name.c_str(), NULL, NULL);
 
     if (!window)
     {
@@ -56,9 +59,9 @@ int main(int argc, char** argv)
     Node& node = model.nodes[scene.nodes[0]];
     Mesh& mesh = model.meshes[node.mesh];
     Primitive& primitive = mesh.primitives[0];
-    int accessorIdx = primitive.attributes["POSITION"];
-    Accessor& accessor = model.accessors[accessorIdx];
-    BufferView& bufferView = model.bufferViews[accessor.bufferView];
+    int positionAccessorIdx = primitive.attributes["POSITION"];
+    Accessor& positionAccessor = model.accessors[positionAccessorIdx];
+    BufferView& bufferView = model.bufferViews[positionAccessor.bufferView];
     Buffer& buffer = model.buffers[bufferView.buffer];
 
     GLuint VAO;
@@ -70,7 +73,27 @@ int main(int argc, char** argv)
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, buffer.data.size(), buffer.data.data(), GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, GetNumComponentsInType(accessor.type), accessor.componentType, GL_TRUE, accessor.ByteStride(bufferView), (const void*)(bufferView.byteOffset + accessor.byteOffset));
+    glVertexAttribPointer(0, GetNumComponentsInType(positionAccessor.type), positionAccessor.componentType, GL_TRUE, positionAccessor.ByteStride(bufferView), (const void*)(bufferView.byteOffset + positionAccessor.byteOffset));
+
+    int indicesAccessorIdx = primitive.indices;
+    bool hasIndices = indicesAccessorIdx >= 0;
+    int countIndices = -1;
+    int indicesType = -1;
+    int indicesOffset = 0;
+    GLuint IBO;
+    if (hasIndices)
+    {
+        Accessor& indicesAccessor = model.accessors[indicesAccessorIdx];
+        countIndices = indicesAccessor.count;
+        indicesType = indicesAccessor.componentType;
+        BufferView& bufferView = model.bufferViews[indicesAccessor.bufferView];
+        Buffer& buffer = model.buffers[bufferView.buffer];
+        indicesOffset += indicesAccessor.byteOffset + bufferView.byteOffset;
+        glGenBuffers(1, &IBO);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, buffer.data.size(), buffer.data.data(), GL_STATIC_DRAW);
+    }
+
 
     const char* vsSource =
     R"(#version 330 core
@@ -104,7 +127,14 @@ int main(int argc, char** argv)
     {
         glClear(GL_COLOR_BUFFER_BIT);
 
-        glDrawArrays(primitive.mode, bufferView.byteOffset, accessor.count);
+        if (!hasIndices)
+        {
+            glDrawArrays(primitive.mode, bufferView.byteOffset, positionAccessor.count);
+        }
+        else
+        {
+            glDrawElements(primitive.mode, countIndices, indicesType, (const void*)indicesOffset);
+        }
 
         glfwSwapBuffers(window);
 
