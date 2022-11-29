@@ -142,7 +142,6 @@ glm::mat4 GetNodeTransform(float time, const tinygltf::AnimationChannel& channel
     int channelValuesBufferOffset = channelValuesAccessor.byteOffset + channelValuesBufferView.byteOffset;
     if (channel.target_path == "translation" || channel.target_path == "scale")
     {
-        // TODO: fix all this ugly shit
         std::span<glm::vec3> channelValues((glm::vec3*)&channelValuesBuffer.data[channelValuesBufferOffset], channelValuesAccessor.count);
         const glm::vec3& a = channelValues[keyframeIndex - 1];
         const glm::vec3& b = channelValues[keyframeIndex];
@@ -285,9 +284,7 @@ int main(int argc, char** argv)
 
     glm::mat4 transform = GetNodeTransform(node);
     GLuint mvpLocation = glGetUniformLocation(program, "mvp");
-    tinygltf::Animation& animation = model.animations[0];
-    tinygltf::AnimationChannel& channel = animation.channels[0];
-    tinygltf::AnimationSampler& sampler = animation.samplers[channel.sampler];
+    bool hasAnimation = model.animations.size() == 1;
 
     float deltaTime = 0.0f;
     float previousFrameTime = 0.0f;
@@ -305,7 +302,14 @@ int main(int argc, char** argv)
 
         ProcessInput(window, camera, deltaTime);
 
-        transform = GetNodeTransform(glfwGetTime(), channel, sampler, model);
+        if (hasAnimation)
+        {
+            tinygltf::Animation& animation = model.animations[0];
+            tinygltf::AnimationChannel& channel = animation.channels[0];
+            tinygltf::AnimationSampler& sampler = animation.samplers[channel.sampler];
+            transform = GetNodeTransform(glfwGetTime(), channel, sampler, model);
+        }
+
         glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 proj = camera.GetProjectionMatrix((float)windowWidth / (float)windowHeight);
         glm::mat4 mvp = proj * view * transform;
