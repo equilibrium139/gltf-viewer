@@ -7,20 +7,63 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/detail/type_quat.hpp>
 #include <glm/ext/matrix_transform.hpp>
+#include "Camera.h"
 #include <iostream>
 #include <span>
 
-using namespace tinygltf;
-
-Model model;
-TinyGLTF loader;
+tinygltf::Model model;
+tinygltf::TinyGLTF loader;
 std::string err;
 std::string warn;
 
 int windowWidth = 800;
 int windowHeight = 600;
 
-glm::mat4 GetNodeTransform(const Node& node)
+void FramebufferSizeCallback(GLFWwindow*, int width, int height)
+{
+    glViewport(0, 0, width, height);
+    windowWidth = width;
+    windowHeight = height;
+}
+
+void ProcessInput(GLFWwindow* window, Camera& camera, float dt)
+{
+    static bool first_poll = true;
+    static double prevMouseX, prevMouseY;
+
+    if (first_poll)
+    {
+        glfwGetCursorPos(window, &prevMouseX, &prevMouseY);
+        first_poll = false;
+    }
+
+    double mouseX, mouseY;
+    glfwGetCursorPos(window, &mouseX, &mouseY);
+
+    std::cout << mouseX << '\n';
+    std::cout << mouseY << '\n';
+
+    double mouseDeltaX = mouseX - prevMouseX;
+    double mouseDeltaY = -(mouseY - prevMouseY);
+
+    //std::cout << mouseDeltaX << '\n';
+    //std::cout << mouseDeltaY << '\n';
+
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    {
+        camera.ProcessMouseMovement((float)mouseDeltaX, (float)mouseDeltaY);
+    }
+
+    prevMouseX = mouseX;
+    prevMouseY = mouseY;
+
+    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) camera.ProcessKeyboard(CAM_FORWARD, dt);
+    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) camera.ProcessKeyboard(CAM_LEFT, dt);
+    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) camera.ProcessKeyboard(CAM_BACKWARD, dt);
+    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) camera.ProcessKeyboard(CAM_RIGHT, dt);
+}
+
+glm::mat4 GetNodeTransform(const tinygltf::Node& node)
 {
     glm::mat4 transform(1.0f);
 
@@ -65,17 +108,17 @@ glm::mat4 GetNodeTransform(const Node& node)
     return transform;
 }
 
-glm::mat4 GetNodeTransform(float time, const AnimationChannel& channel, const AnimationSampler& sampler, const Model& model)
+glm::mat4 GetNodeTransform(float time, const tinygltf::AnimationChannel& channel, const tinygltf::AnimationSampler& sampler, const tinygltf::Model& model)
 {
-    const Accessor& keyframeAccessor = model.accessors[sampler.input];
+    const tinygltf::Accessor& keyframeAccessor = model.accessors[sampler.input];
     assert(keyframeAccessor.type == TINYGLTF_TYPE_SCALAR);
-    const BufferView& keyframeBufferView = model.bufferViews[keyframeAccessor.bufferView];
-    const Buffer& keyframeBuffer = model.buffers[keyframeBufferView.buffer];
+    const tinygltf::BufferView& keyframeBufferView = model.bufferViews[keyframeAccessor.bufferView];
+    const tinygltf::Buffer& keyframeBuffer = model.buffers[keyframeBufferView.buffer];
 
-    const Accessor& channelValuesAccessor = model.accessors[sampler.output];
+    const tinygltf::Accessor& channelValuesAccessor = model.accessors[sampler.output];
     assert(channelValuesAccessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT);
-    const BufferView& channelValuesBufferView = model.bufferViews[channelValuesAccessor.bufferView];
-    const Buffer& channelValuesBuffer = model.buffers[channelValuesBufferView.buffer];
+    const tinygltf::BufferView& channelValuesBufferView = model.bufferViews[channelValuesAccessor.bufferView];
+    const tinygltf::Buffer& channelValuesBuffer = model.buffers[channelValuesBufferView.buffer];
 
     const float animDuration = keyframeAccessor.maxValues[0];
     const float clipTime = std::fmod(time, animDuration);
@@ -153,7 +196,7 @@ int main(int argc, char** argv)
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    Scene& scene = model.scenes[model.defaultScene];
+    tinygltf::Scene& scene = model.scenes[model.defaultScene];
 	GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, scene.name.c_str(), NULL, NULL);
 
     if (!window)
@@ -170,13 +213,16 @@ int main(int argc, char** argv)
 		return -1;
 	}    
 
-    Node& node = model.nodes[scene.nodes[0]];
-    Mesh& mesh = model.meshes[node.mesh];
-    Primitive& primitive = mesh.primitives[0];
+    glViewport(0, 0, windowWidth, windowHeight);
+    glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
+
+    tinygltf::Node& node = model.nodes[scene.nodes[0]];
+    tinygltf::Mesh& mesh = model.meshes[node.mesh];
+    tinygltf::Primitive& primitive = mesh.primitives[0];
     int positionAccessorIdx = primitive.attributes["POSITION"];
-    Accessor& positionAccessor = model.accessors[positionAccessorIdx];
-    BufferView& bufferView = model.bufferViews[positionAccessor.bufferView];
-    Buffer& buffer = model.buffers[bufferView.buffer];
+    tinygltf::Accessor& positionAccessor = model.accessors[positionAccessorIdx];
+    tinygltf::BufferView& bufferView = model.bufferViews[positionAccessor.bufferView];
+    tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
 
     GLuint VAO;
     glGenVertexArrays(1, &VAO);
@@ -187,7 +233,7 @@ int main(int argc, char** argv)
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, buffer.data.size(), buffer.data.data(), GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, GetNumComponentsInType(positionAccessor.type), positionAccessor.componentType, GL_TRUE, positionAccessor.ByteStride(bufferView), (const void*)(bufferView.byteOffset + positionAccessor.byteOffset));
+    glVertexAttribPointer(0, tinygltf::GetNumComponentsInType(positionAccessor.type), positionAccessor.componentType, GL_TRUE, positionAccessor.ByteStride(bufferView), (const void*)(bufferView.byteOffset + positionAccessor.byteOffset));
 
     int indicesAccessorIdx = primitive.indices;
     bool hasIndices = indicesAccessorIdx >= 0;
@@ -197,11 +243,11 @@ int main(int argc, char** argv)
     GLuint IBO;
     if (hasIndices)
     {
-        Accessor& indicesAccessor = model.accessors[indicesAccessorIdx];
+        tinygltf::Accessor& indicesAccessor = model.accessors[indicesAccessorIdx];
         countIndices = indicesAccessor.count;
         indicesType = indicesAccessor.componentType;
-        BufferView& bufferView = model.bufferViews[indicesAccessor.bufferView];
-        Buffer& buffer = model.buffers[bufferView.buffer];
+        tinygltf::BufferView& bufferView = model.bufferViews[indicesAccessor.bufferView];
+        tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
         indicesOffset += indicesAccessor.byteOffset + bufferView.byteOffset;
         glGenBuffers(1, &IBO);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
@@ -239,23 +285,31 @@ int main(int argc, char** argv)
 
     glm::mat4 transform = GetNodeTransform(node);
     GLuint mvpLocation = glGetUniformLocation(program, "mvp");
-    Animation& animation = model.animations[0];
-    AnimationChannel& channel = animation.channels[0];
-    AnimationSampler& sampler = animation.samplers[channel.sampler];
+    tinygltf::Animation& animation = model.animations[0];
+    tinygltf::AnimationChannel& channel = animation.channels[0];
+    tinygltf::AnimationSampler& sampler = animation.samplers[channel.sampler];
 
     float deltaTime = 0.0f;
     float previousFrameTime = 0.0f;
     float currentFrameTime = 0.0f;
 
+    Camera camera;
+    camera.position.z = 5.0f;
+
     while (!glfwWindowShouldClose(window))
     {
         // Update
         currentFrameTime = (float)glfwGetTime();
-        previousFrameTime = currentFrameTime;
         deltaTime = currentFrameTime - previousFrameTime;
+        previousFrameTime = currentFrameTime;
+
+        ProcessInput(window, camera, deltaTime);
 
         transform = GetNodeTransform(glfwGetTime(), channel, sampler, model);
-        glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, glm::value_ptr(transform));
+        glm::mat4 view = camera.GetViewMatrix();
+        glm::mat4 proj = camera.GetProjectionMatrix((float)windowWidth / (float)windowHeight);
+        glm::mat4 mvp = proj * view * transform;
+        glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, glm::value_ptr(mvp));
 
         // Render
         glClear(GL_COLOR_BUFFER_BIT);
