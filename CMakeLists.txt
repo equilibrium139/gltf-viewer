@@ -12,6 +12,7 @@ add_executable(gltf-viewer src/Main.cpp
 )
 
 find_package(glfw3 CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
 
 target_include_directories(gltf-viewer PRIVATE include)
-target_link_libraries(gltf-viewer PRIVATE glfw)
+target_link_libraries(gltf-viewer PRIVATE glfw glm::glm)
