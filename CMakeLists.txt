@@ -8,6 +8,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_executable(gltf-viewer src/Main.cpp
 						   src/Camera.h
+						   src/Entity.h
+						   src/Mesh.h
+						   src/Scene.h
+						   src/Shader.cpp
+						   src/Shader.h
 						   src/glad.cpp
 						   src/tiny_gltf.cpp
 )

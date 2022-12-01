@@ -8,8 +8,10 @@
 #include <glm/detail/type_quat.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include "Camera.h"
+#include "Shader.h"
 #include <iostream>
 #include <span>
+#include <utility>
 
 tinygltf::Model model;
 tinygltf::TinyGLTF loader;
@@ -40,14 +42,8 @@ void ProcessInput(GLFWwindow* window, Camera& camera, float dt)
     double mouseX, mouseY;
     glfwGetCursorPos(window, &mouseX, &mouseY);
 
-    std::cout << mouseX << '\n';
-    std::cout << mouseY << '\n';
-
     double mouseDeltaX = mouseX - prevMouseX;
     double mouseDeltaY = -(mouseY - prevMouseY);
-
-    //std::cout << mouseDeltaX << '\n';
-    //std::cout << mouseDeltaY << '\n';
 
     if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
     {
@@ -95,7 +91,7 @@ glm::mat4 GetNodeTransform(const tinygltf::Node& node)
         }
         if (node.rotation.size() == 4)
         {
-            glm::quat rotation(node.rotation[0], node.rotation[1], node.rotation[2], node.rotation[3]);
+            glm::quat rotation(node.rotation[3], node.rotation[0], node.rotation[1], node.rotation[2]);
             transform = transform * glm::mat4(rotation);
         }
         if (node.scale.size() == 3)
@@ -110,6 +106,8 @@ glm::mat4 GetNodeTransform(const tinygltf::Node& node)
 
 glm::mat4 GetNodeTransform(float time, const tinygltf::AnimationChannel& channel, const tinygltf::AnimationSampler& sampler, const tinygltf::Model& model)
 {
+    assert(channel.target_path == "translation" || channel.target_path == "scale" || channel.target_path == "rotation");
+
     const tinygltf::Accessor& keyframeAccessor = model.accessors[sampler.input];
     assert(keyframeAccessor.type == TINYGLTF_TYPE_SCALAR);
     const tinygltf::BufferView& keyframeBufferView = model.bufferViews[keyframeAccessor.bufferView];
@@ -155,7 +153,7 @@ glm::mat4 GetNodeTransform(float time, const tinygltf::AnimationChannel& channel
             return glm::scale(glm::mat4(), interpolated);
         }
     }
-    if (channel.target_path == "rotation")
+    else
     {
         std::span<glm::quat> channelValues((glm::quat*)&channelValuesBuffer.data[channelValuesBufferOffset], channelValuesAccessor.count);
         const glm::quat& a = channelValues[keyframeIndex - 1];
@@ -163,9 +161,62 @@ glm::mat4 GetNodeTransform(float time, const tinygltf::AnimationChannel& channel
         const glm::quat interpolated = glm::slerp(a, b, t);
         return glm::mat4(1.0f) * glm::mat4(interpolated);
     }
+}
 
-    assert(channel.target_path != "weights" && "Weights unsupported currently.");
-    return glm::mat4();
+std::pair<float, float> GetWeights(float time, const tinygltf::AnimationChannel& channel, const tinygltf::AnimationSampler& sampler, const tinygltf::Model)
+{
+    assert(channel.target_path == "weights");
+
+    const tinygltf::Accessor& keyframeAccessor = model.accessors[sampler.input];
+    assert(keyframeAccessor.type == TINYGLTF_TYPE_SCALAR);
+    const tinygltf::BufferView& keyframeBufferView = model.bufferViews[keyframeAccessor.bufferView];
+    const tinygltf::Buffer& keyframeBuffer = model.buffers[keyframeBufferView.buffer];
+
+    const tinygltf::Accessor& weightsAccessor = model.accessors[sampler.output];
+    assert(weightsAccessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT);
+    const tinygltf::BufferView& weightsBufferView = model.bufferViews[weightsAccessor.bufferView];
+    const tinygltf::Buffer& weightsBuffer = model.buffers[weightsBufferView.buffer];
+
+    assert(weightsAccessor.count == keyframeAccessor.count * 2 && "Only 2 morph targets supported currently");
+
+    int keyframeBufferOffset = keyframeAccessor.byteOffset + keyframeBufferView.byteOffset;
+    std::span<float> keyframeTimes((float*)&keyframeBuffer.data[keyframeBufferOffset], keyframeAccessor.count);
+
+    int weightsBufferOffset = weightsAccessor.byteOffset + weightsBufferView.byteOffset;
+    std::span<float> weights((float*)&weightsBuffer.data[weightsBufferOffset], weightsAccessor.count);
+
+    const float animDuration = keyframeAccessor.maxValues[0];
+    const float clipTime = std::fmod(time, animDuration);
+
+    int keyframeIndex = 0;
+    while (keyframeTimes[keyframeIndex] < clipTime)
+    {
+        keyframeIndex++;
+    }
+
+    assert(keyframeIndex > 0);
+
+    const float aTime = keyframeTimes[keyframeIndex - 1];
+    const float bTime = keyframeTimes[keyframeIndex];
+    const float t = (clipTime - aTime) / (bTime - aTime);
+
+    float morphTarget1Weight;
+    {
+        const int index = keyframeIndex * 2;
+        const float aWeight = weights[index - 2];
+        const float bWeight = weights[index];
+        morphTarget1Weight = aWeight * t + bWeight * (1.0f - t);
+    }
+
+    float morphTarget2Weight;
+    {
+        const int index = keyframeIndex * 2 + 1;
+        const float aWeight = weights[index - 2];
+        const float bWeight = weights[index];
+        morphTarget2Weight = aWeight * t + bWeight * (1.0f - t);
+    }
+
+    return { morphTarget1Weight, morphTarget2Weight };
 }
 
 int main(int argc, char** argv)
@@ -215,6 +266,7 @@ int main(int argc, char** argv)
     glViewport(0, 0, windowWidth, windowHeight);
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
 
+    assert(model.buffers.size() == 1);
     tinygltf::Node& node = model.nodes[scene.nodes[0]];
     tinygltf::Mesh& mesh = model.meshes[node.mesh];
     tinygltf::Primitive& primitive = mesh.primitives[0];
@@ -230,15 +282,51 @@ int main(int argc, char** argv)
     GLuint VBO;
     glGenBuffers(1, &VBO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, buffer.data.size(), buffer.data.data(), GL_STATIC_DRAW);
+    
+    glBufferData(GL_ARRAY_BUFFER, bufferView.byteLength, buffer.data.data() + bufferView.byteOffset, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, tinygltf::GetNumComponentsInType(positionAccessor.type), positionAccessor.componentType, GL_TRUE, positionAccessor.ByteStride(bufferView), (const void*)(bufferView.byteOffset + positionAccessor.byteOffset));
+    glVertexAttribPointer(0, tinygltf::GetNumComponentsInType(positionAccessor.type), positionAccessor.componentType, GL_TRUE, positionAccessor.ByteStride(bufferView), (const void*)positionAccessor.byteOffset);
+    bool hasMorphTargets = primitive.targets.size() > 0;
+    if (hasMorphTargets)
+    {
+        GLuint morphTargetsVBO;
+        glGenBuffers(1, &morphTargetsVBO);
+        glBindBuffer(GL_ARRAY_BUFFER, morphTargetsVBO);
+
+        assert(primitive.targets.size() == 2 && "Only 2 morph targets supported currently");
+        // TODO:add support for other attributes like normals, tc etc
+        tinygltf::Accessor& firstMorphTargetPositionAccessor = model.accessors[primitive.targets[0]["POSITION"]];
+        tinygltf::Accessor& secondMorphTargetPositionAccessor = model.accessors[primitive.targets[1]["POSITION"]];
+        tinygltf::BufferView& firstMorphTargetBV = model.bufferViews[firstMorphTargetPositionAccessor.bufferView];
+        tinygltf::BufferView& secondMorphTargetBV = model.bufferViews[secondMorphTargetPositionAccessor.bufferView];
+        assert(firstMorphTargetBV.byteLength == secondMorphTargetBV.byteLength);
+        assert(firstMorphTargetBV.byteOffset < secondMorphTargetBV.byteOffset);
+
+        // If morph targets are contiguous in buffer, send them to buffer data in one go
+        if (firstMorphTargetBV.byteOffset + firstMorphTargetBV.byteLength == secondMorphTargetBV.byteOffset)
+        {
+            glBufferData(GL_ARRAY_BUFFER, 2 * firstMorphTargetBV.byteLength, buffer.data.data() + firstMorphTargetBV.byteOffset, GL_STATIC_DRAW);
+        }
+        else
+        {
+            glBufferData(GL_ARRAY_BUFFER, 2 * firstMorphTargetBV.byteLength, NULL, GL_STATIC_DRAW);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, firstMorphTargetBV.byteLength, buffer.data.data() + firstMorphTargetBV.byteOffset);
+            glBufferSubData(GL_ARRAY_BUFFER, firstMorphTargetBV.byteLength, secondMorphTargetBV.byteLength, buffer.data.data() + secondMorphTargetBV.byteOffset);
+        }
+        // Both morph targets should have the same values for these variables
+        int numComponents = tinygltf::GetNumComponentsInType(firstMorphTargetPositionAccessor.type);
+        int componentType = firstMorphTargetPositionAccessor.componentType;
+        int stride = firstMorphTargetPositionAccessor.ByteStride(firstMorphTargetBV);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, numComponents, componentType, GL_TRUE, stride, 0);
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, numComponents, componentType, GL_TRUE, stride, (const void*)firstMorphTargetBV.byteLength);
+    }
 
     int indicesAccessorIdx = primitive.indices;
     bool hasIndices = indicesAccessorIdx >= 0;
     int countIndices = -1;
     int indicesType = -1;
-    int indicesOffset = 0;
     GLuint IBO;
     if (hasIndices)
     {
@@ -247,43 +335,15 @@ int main(int argc, char** argv)
         indicesType = indicesAccessor.componentType;
         tinygltf::BufferView& bufferView = model.bufferViews[indicesAccessor.bufferView];
         tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
-        indicesOffset += indicesAccessor.byteOffset + bufferView.byteOffset;
         glGenBuffers(1, &IBO);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, buffer.data.size(), buffer.data.data(), GL_STATIC_DRAW);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, bufferView.byteLength, buffer.data.data() + bufferView.byteOffset, GL_STATIC_DRAW);
     }
 
-    const char* vsSource =
-    R"(#version 330 core
-       layout(location = 0) in vec3 aPos;
-       uniform mat4 mvp;
-       void main()
-       {
-            gl_Position = mvp * vec4(aPos, 1.0);
-       })";
-    GLuint vs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vs, 1, &vsSource, 0);
-    glCompileShader(vs);
-
-    const char* fsSource =
-    R"(#version 330 core
-        out vec4 color;
-        void main()
-        {
-            color = vec4(1.0, 0.0, 0.0, 1.0);
-        })";
-    GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(fs, 1, &fsSource, 0);
-    glCompileShader(fs);
-
-    GLuint program = glCreateProgram();
-    glAttachShader(program, vs);
-    glAttachShader(program, fs);
-    glLinkProgram(program);
-    glUseProgram(program);
+    Shader defaultShader("Shaders/default.vert", "Shaders/default.frag");
+    Shader morphShader("Shaders/morph.vert", "Shaders/default.frag");
 
     glm::mat4 transform = GetNodeTransform(node);
-    GLuint mvpLocation = glGetUniformLocation(program, "mvp");
     bool hasAnimation = model.animations.size() == 1;
 
     float deltaTime = 0.0f;
@@ -304,19 +364,42 @@ int main(int argc, char** argv)
 
         if (hasAnimation)
         {
-            tinygltf::Animation& animation = model.animations[0];
-            tinygltf::AnimationChannel& channel = animation.channels[0];
-            tinygltf::AnimationSampler& sampler = animation.samplers[channel.sampler];
-            transform = GetNodeTransform(glfwGetTime(), channel, sampler, model);
+            if (!hasMorphTargets)
+            {
+                tinygltf::Animation& animation = model.animations[0];
+                tinygltf::AnimationChannel& channel = animation.channels[0];
+                tinygltf::AnimationSampler& sampler = animation.samplers[channel.sampler];
+                transform = GetNodeTransform(glfwGetTime(), channel, sampler, model);
+            }
+            else
+            {
+                tinygltf::Animation& animation = model.animations[0];
+                tinygltf::AnimationChannel& channel = animation.channels[0];
+                tinygltf::AnimationSampler& sampler = animation.samplers[channel.sampler];
+                std::pair<float, float> weights = GetWeights(glfwGetTime(), channel, sampler, model);
+                morphShader.use();
+                morphShader.SetFloat("morph1Weight", weights.first);
+                morphShader.SetFloat("morph2Weight", weights.second);
+            }
         }
+
+        // Render
+        glClear(GL_COLOR_BUFFER_BIT);
 
         glm::mat4 view = camera.GetViewMatrix();
         glm::mat4 proj = camera.GetProjectionMatrix((float)windowWidth / (float)windowHeight);
         glm::mat4 mvp = proj * view * transform;
-        glUniformMatrix4fv(mvpLocation, 1, GL_FALSE, glm::value_ptr(mvp));
 
-        // Render
-        glClear(GL_COLOR_BUFFER_BIT);
+        if (!hasMorphTargets)
+        {
+            defaultShader.use();
+            defaultShader.SetMat4("mvp", glm::value_ptr(mvp));
+        }
+        else
+        {
+            morphShader.use();
+            morphShader.SetMat4("mvp", glm::value_ptr(mvp));
+        }
 
         if (!hasIndices)
         {
@@ -324,7 +407,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            glDrawElements(primitive.mode, countIndices, indicesType, (const void*)indicesOffset);
+            glDrawElements(primitive.mode, countIndices, indicesType, 0);
         }
 
         glfwSwapBuffers(window);
