@@ -1,7 +1,9 @@
 #include "Shader.h"
 
-Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * geometryPath, const std::vector<UniformBlockBinding>& ub_bindings)
+Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * geometryPath, const std::vector<UniformBlockBinding>& ub_bindings, const std::vector<std::string> defines)
 {
+	static const std::string version = "#version 330 core\n";
+
 	unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
 	unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
 
@@ -10,9 +12,18 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 
 	auto vShaderCode = vertexSource.c_str();
 	auto fShaderCode = fragmentSource.c_str();
+
+	std::string definesString;
+	for (const std::string& define : defines)
+	{
+		definesString += "#define " + define + "\n";
+	}
+
+	const char* vShaderSources[3] = { version.c_str(), definesString.c_str(), vShaderCode};
+	const char* fShaderSources[3] = { version.c_str(), definesString.c_str(), fShaderCode};
 	
-	glShaderSource(vertexShader, 1, &vShaderCode, NULL);
-	glShaderSource(fragmentShader, 1, &fShaderCode, NULL);
+	glShaderSource(vertexShader, 3, vShaderSources, NULL);
+	glShaderSource(fragmentShader, 3, fShaderSources, NULL);
 
 	glCompileShader(vertexShader);
 

@@ -21,7 +21,9 @@ class Shader
 {
 public:
 	unsigned int id;
-	Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath = nullptr, const std::vector<UniformBlockBinding>& ub_bindings = {});
+	Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath = nullptr, const std::vector<UniformBlockBinding>& ub_bindings = {},
+		const std::vector<std::string> defines = {});
+
 
 	void use();
 

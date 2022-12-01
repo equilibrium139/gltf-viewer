@@ -266,61 +266,126 @@ int main(int argc, char** argv)
     glViewport(0, 0, windowWidth, windowHeight);
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
 
+    glEnable(GL_DEPTH_TEST);
+
     assert(model.buffers.size() == 1);
     tinygltf::Node& node = model.nodes[scene.nodes[0]];
     tinygltf::Mesh& mesh = model.meshes[node.mesh];
     tinygltf::Primitive& primitive = mesh.primitives[0];
     int positionAccessorIdx = primitive.attributes["POSITION"];
     tinygltf::Accessor& positionAccessor = model.accessors[positionAccessorIdx];
-    tinygltf::BufferView& bufferView = model.bufferViews[positionAccessor.bufferView];
-    tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
+    tinygltf::BufferView& positionBV = model.bufferViews[positionAccessor.bufferView];
+    assert(positionBV.byteLength == 
+        positionAccessor.count * tinygltf::GetComponentSizeInBytes(positionAccessor.componentType) * tinygltf::GetNumComponentsInType(positionAccessor.type) &&
+        "Interleaved buffers not currently supported");
+    assert(positionAccessor.byteOffset == 0);
+    tinygltf::Buffer& buffer = model.buffers[positionBV.buffer];
 
     GLuint VAO;
     glGenVertexArrays(1, &VAO);
     glBindVertexArray(VAO);
 
-    GLuint VBO;
-    glGenBuffers(1, &VBO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    
-    glBufferData(GL_ARRAY_BUFFER, bufferView.byteLength, buffer.data.data() + bufferView.byteOffset, GL_STATIC_DRAW);
+    GLuint positionsVBO;
+    glGenBuffers(1, &positionsVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, positionsVBO);
+
+    std::vector<glm::vec3> positions((glm::vec3*)(buffer.data.data() + positionBV.byteOffset), (glm::vec3*)(buffer.data.data() + positionBV.byteOffset) + positionAccessor.count);
+    for (auto& v : positions) v *= glm::vec3(100.0f, 100.0f, 100.0f);
+
+    glBufferData(GL_ARRAY_BUFFER, positionBV.byteLength, buffer.data.data() + positionBV.byteOffset, GL_STATIC_DRAW);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, tinygltf::GetNumComponentsInType(positionAccessor.type), positionAccessor.componentType, GL_TRUE, positionAccessor.ByteStride(bufferView), (const void*)positionAccessor.byteOffset);
+    glVertexAttribPointer(0, tinygltf::GetNumComponentsInType(positionAccessor.type), positionAccessor.componentType, GL_TRUE, positionAccessor.ByteStride(positionBV), (const void*)positionAccessor.byteOffset);
+
+    auto normalAccessorIdxIter = primitive.attributes.find("NORMAL");
+    bool hasNormals = normalAccessorIdxIter != primitive.attributes.end();
+    
+    if (hasNormals)
+    {
+        int normalAccessorIdx = normalAccessorIdxIter->second;
+        tinygltf::Accessor& normalAccessor = model.accessors[normalAccessorIdx];
+        tinygltf::BufferView& normalBV = model.bufferViews[normalAccessor.bufferView];
+        assert(normalBV.byteLength ==
+            normalAccessor.count * tinygltf::GetComponentSizeInBytes(normalAccessor.componentType) * tinygltf::GetNumComponentsInType(normalAccessor.type) &&
+            "Interleaved buffers not currently supported");
+        assert(normalAccessor.count == positionAccessor.count);
+        assert(normalAccessor.byteOffset == 0);
+
+        std::span<glm::vec3> normals((glm::vec3*)(buffer.data.data() + normalBV.byteOffset), normalAccessor.count);
+
+        GLuint normalsVBO;
+        glGenBuffers(1, &normalsVBO);
+        glBindBuffer(GL_ARRAY_BUFFER, normalsVBO);
+        glBufferData(GL_ARRAY_BUFFER, normalBV.byteLength, buffer.data.data() + normalBV.byteOffset, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, tinygltf::GetNumComponentsInType(normalAccessor.type), normalAccessor.componentType, GL_TRUE, normalAccessor.ByteStride(normalBV), (const void*)normalAccessor.byteOffset);
+    }
+        
     bool hasMorphTargets = primitive.targets.size() > 0;
     if (hasMorphTargets)
     {
-        GLuint morphTargetsVBO;
-        glGenBuffers(1, &morphTargetsVBO);
-        glBindBuffer(GL_ARRAY_BUFFER, morphTargetsVBO);
+        GLuint morphTargetsPositionsVBO;
+        glGenBuffers(1, &morphTargetsPositionsVBO);
+        glBindBuffer(GL_ARRAY_BUFFER, morphTargetsPositionsVBO);
 
         assert(primitive.targets.size() == 2 && "Only 2 morph targets supported currently");
-        // TODO:add support for other attributes like normals, tc etc
+        // TODO:add support for other attributes like texture coordinates
         tinygltf::Accessor& firstMorphTargetPositionAccessor = model.accessors[primitive.targets[0]["POSITION"]];
         tinygltf::Accessor& secondMorphTargetPositionAccessor = model.accessors[primitive.targets[1]["POSITION"]];
-        tinygltf::BufferView& firstMorphTargetBV = model.bufferViews[firstMorphTargetPositionAccessor.bufferView];
-        tinygltf::BufferView& secondMorphTargetBV = model.bufferViews[secondMorphTargetPositionAccessor.bufferView];
-        assert(firstMorphTargetBV.byteLength == secondMorphTargetBV.byteLength);
-        assert(firstMorphTargetBV.byteOffset < secondMorphTargetBV.byteOffset);
+        tinygltf::BufferView& firstMorphTargetPositionBV = model.bufferViews[firstMorphTargetPositionAccessor.bufferView];
+        tinygltf::BufferView& secondMorphTargetPositionBV = model.bufferViews[secondMorphTargetPositionAccessor.bufferView];
+        assert(firstMorphTargetPositionBV.byteLength == secondMorphTargetPositionBV.byteLength);
+        assert(firstMorphTargetPositionBV.byteOffset < secondMorphTargetPositionBV.byteOffset);
 
         // If morph targets are contiguous in buffer, send them to buffer data in one go
-        if (firstMorphTargetBV.byteOffset + firstMorphTargetBV.byteLength == secondMorphTargetBV.byteOffset)
+        if (firstMorphTargetPositionBV.byteOffset + firstMorphTargetPositionBV.byteLength == secondMorphTargetPositionBV.byteOffset)
         {
-            glBufferData(GL_ARRAY_BUFFER, 2 * firstMorphTargetBV.byteLength, buffer.data.data() + firstMorphTargetBV.byteOffset, GL_STATIC_DRAW);
+            glBufferData(GL_ARRAY_BUFFER, 2 * firstMorphTargetPositionBV.byteLength, buffer.data.data() + firstMorphTargetPositionBV.byteOffset, GL_STATIC_DRAW);
         }
         else
         {
-            glBufferData(GL_ARRAY_BUFFER, 2 * firstMorphTargetBV.byteLength, NULL, GL_STATIC_DRAW);
-            glBufferSubData(GL_ARRAY_BUFFER, 0, firstMorphTargetBV.byteLength, buffer.data.data() + firstMorphTargetBV.byteOffset);
-            glBufferSubData(GL_ARRAY_BUFFER, firstMorphTargetBV.byteLength, secondMorphTargetBV.byteLength, buffer.data.data() + secondMorphTargetBV.byteOffset);
+            glBufferData(GL_ARRAY_BUFFER, 2 * firstMorphTargetPositionBV.byteLength, NULL, GL_STATIC_DRAW);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, firstMorphTargetPositionBV.byteLength, buffer.data.data() + firstMorphTargetPositionBV.byteOffset);
+            glBufferSubData(GL_ARRAY_BUFFER, firstMorphTargetPositionBV.byteLength, secondMorphTargetPositionBV.byteLength, buffer.data.data() + secondMorphTargetPositionBV.byteOffset);
         }
         // Both morph targets should have the same values for these variables
         int numComponents = tinygltf::GetNumComponentsInType(firstMorphTargetPositionAccessor.type);
         int componentType = firstMorphTargetPositionAccessor.componentType;
-        int stride = firstMorphTargetPositionAccessor.ByteStride(firstMorphTargetBV);
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, numComponents, componentType, GL_TRUE, stride, 0);
+        int stride = firstMorphTargetPositionAccessor.ByteStride(firstMorphTargetPositionBV);
         glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, numComponents, componentType, GL_TRUE, stride, (const void*)firstMorphTargetBV.byteLength);
+        glVertexAttribPointer(2, numComponents, componentType, GL_TRUE, stride, 0);
+        glEnableVertexAttribArray(3);
+        glVertexAttribPointer(3, numComponents, componentType, GL_TRUE, stride, (const void*)firstMorphTargetPositionBV.byteLength);
+
+        GLuint morphTargetsNormalsVBO;
+        glGenBuffers(1, &morphTargetsNormalsVBO);
+        glBindBuffer(GL_ARRAY_BUFFER, morphTargetsNormalsVBO);
+
+        tinygltf::Accessor& firstMorphTargetNormalAccessor = model.accessors[primitive.targets[0]["NORMAL"]];
+        tinygltf::Accessor& secondMorphTargetNormalAccessor = model.accessors[primitive.targets[1]["NORMAL"]];
+        tinygltf::BufferView& firstMorphTargetNormalBV = model.bufferViews[firstMorphTargetNormalAccessor.bufferView];
+        tinygltf::BufferView& secondMorphTargetNormalBV = model.bufferViews[secondMorphTargetNormalAccessor.bufferView];
+        assert(firstMorphTargetNormalBV.byteLength == secondMorphTargetNormalBV.byteLength);
+        assert(firstMorphTargetNormalBV.byteOffset < secondMorphTargetNormalBV.byteOffset);
+
+        // If morph targets are contiguous in buffer, send them to buffer data in one go
+        if (firstMorphTargetNormalBV.byteOffset + firstMorphTargetNormalBV.byteLength == secondMorphTargetNormalBV.byteOffset)
+        {
+            glBufferData(GL_ARRAY_BUFFER, 2 * firstMorphTargetNormalBV.byteLength, buffer.data.data() + firstMorphTargetNormalBV.byteOffset, GL_STATIC_DRAW);
+        }
+        else
+        {
+            glBufferData(GL_ARRAY_BUFFER, 2 * firstMorphTargetNormalBV.byteLength, NULL, GL_STATIC_DRAW);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, firstMorphTargetNormalBV.byteLength, buffer.data.data() + firstMorphTargetNormalBV.byteOffset);
+            glBufferSubData(GL_ARRAY_BUFFER, firstMorphTargetNormalBV.byteLength, secondMorphTargetNormalBV.byteLength, buffer.data.data() + secondMorphTargetNormalBV.byteOffset);
+        }
+        // Both morph targets should have the same values for these variables
+        numComponents = tinygltf::GetNumComponentsInType(firstMorphTargetNormalAccessor.type);
+        componentType = firstMorphTargetNormalAccessor.componentType;
+        stride = firstMorphTargetNormalAccessor.ByteStride(firstMorphTargetNormalBV);
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, numComponents, componentType, GL_TRUE, stride, 0);
+        glEnableVertexAttribArray(5);
+        glVertexAttribPointer(5, numComponents, componentType, GL_TRUE, stride, (const void*)firstMorphTargetNormalBV.byteLength);
     }
 
     int indicesAccessorIdx = primitive.indices;
@@ -335,13 +400,17 @@ int main(int argc, char** argv)
         indicesType = indicesAccessor.componentType;
         tinygltf::BufferView& bufferView = model.bufferViews[indicesAccessor.bufferView];
         tinygltf::Buffer& buffer = model.buffers[bufferView.buffer];
+        std::span<unsigned short> indices((unsigned short*)(buffer.data.data() + bufferView.byteOffset), indicesAccessor.count);
         glGenBuffers(1, &IBO);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, bufferView.byteLength, buffer.data.data() + bufferView.byteOffset, GL_STATIC_DRAW);
     }
 
-    Shader defaultShader("Shaders/default.vert", "Shaders/default.frag");
-    Shader morphShader("Shaders/morph.vert", "Shaders/default.frag");
+    std::vector<std::string> defines;
+    if (hasNormals) defines.push_back("HAS_NORMALS");
+    if (hasMorphTargets) defines.push_back("HAS_MORPH_TARGETS");
+    Shader defaultShader("Shaders/default.vert", "Shaders/default.frag", nullptr, {}, defines);
+    //Shader morphShader("Shaders/morph.vert", "Shaders/default.frag");
 
     glm::mat4 transform = GetNodeTransform(node);
     bool hasAnimation = model.animations.size() == 1;
@@ -377,33 +446,33 @@ int main(int argc, char** argv)
                 tinygltf::AnimationChannel& channel = animation.channels[0];
                 tinygltf::AnimationSampler& sampler = animation.samplers[channel.sampler];
                 std::pair<float, float> weights = GetWeights(glfwGetTime(), channel, sampler, model);
-                morphShader.use();
-                morphShader.SetFloat("morph1Weight", weights.first);
-                morphShader.SetFloat("morph2Weight", weights.second);
+                defaultShader.use();
+                defaultShader.SetFloat("morph1Weight", weights.first);
+                defaultShader.SetFloat("morph2Weight", weights.second);
             }
         }
 
         // Render
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glm::mat4 view = camera.GetViewMatrix();
-        glm::mat4 proj = camera.GetProjectionMatrix((float)windowWidth / (float)windowHeight);
-        glm::mat4 mvp = proj * view * transform;
+        glm::mat4 modelView = view * transform;
+        glm::mat4 projection = camera.GetProjectionMatrix((float)windowWidth / (float)windowHeight);
 
-        if (!hasMorphTargets)
+        defaultShader.use();
+        defaultShader.SetMat4("modelView", glm::value_ptr(modelView));
+        defaultShader.SetMat4("projection", glm::value_ptr(projection));
+        defaultShader.SetVec3("pointLight.positionVS", glm::vec3(0.0f, 0.0f, 0.0f));
+        defaultShader.SetVec3("pointLight.color", glm::vec3(0.5f, 0.5f, 0.5f));
+        if (hasNormals)
         {
-            defaultShader.use();
-            defaultShader.SetMat4("mvp", glm::value_ptr(mvp));
-        }
-        else
-        {
-            morphShader.use();
-            morphShader.SetMat4("mvp", glm::value_ptr(mvp));
+            glm::mat3 normalMatrixVS = glm::transpose(glm::inverse(glm::mat3(modelView)));
+            defaultShader.SetMat3("normalMatrixVS", glm::value_ptr(normalMatrixVS));
         }
 
         if (!hasIndices)
         {
-            glDrawArrays(primitive.mode, bufferView.byteOffset, positionAccessor.count);
+            glDrawArrays(primitive.mode, positionBV.byteOffset, positionAccessor.count);
         }
         else
         {
