@@ -6,24 +6,26 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-add_executable(gltf-viewer src/Main.cpp
-						   src/Animation.h
-						   src/Camera.h
-						   src/Entity.h
-						   src/GLTFHelpers.cpp
-						   src/GLTFHelpers.h
-						   src/GLTFResources.h
-						   src/Mesh.cpp
-						   src/Mesh.h
-						   src/Scene.h
-						   src/Scene.cpp
-						   src/Shader.cpp
-						   src/Shader.h
-						   src/Transform.h
-						   src/Transform.cpp
-						   src/VertexAttribute.h
-						   src/glad.cpp
-						   src/tiny_gltf.cpp
+add_executable(gltf-viewer 
+src/Main.cpp
+src/Animation.cpp
+src/Animation.h
+src/Camera.h
+src/Entity.h
+src/GLTFHelpers.h
+src/GLTFResources.cpp
+src/GLTFResources.h
+src/Mesh.cpp
+src/Mesh.h
+src/Scene.h
+src/Scene.cpp
+src/Shader.cpp
+src/Shader.h
+src/Transform.h
+src/Transform.cpp
+src/VertexAttribute.h
+src/glad.cpp
+src/tiny_gltf.cpp
 )
 
 find_package(glfw3 CONFIG REQUIRED)

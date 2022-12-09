@@ -43,7 +43,10 @@ static int GetAttributeByteOffset(VertexAttribute attributes, VertexAttribute at
 			return offset;
 		}
 		
-		offset += attributeByteSizes.find(attr)->second;
+		if (HasFlag(attributes, attr))
+		{
+			offset += attributeByteSizes.find(attr)->second;
+		}
 	}
 
 	assert(false && "Attribute not found");

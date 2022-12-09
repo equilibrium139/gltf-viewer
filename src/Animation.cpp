@@ -46,7 +46,7 @@ std::vector<float> SampleWeightsAt(float time, std::span<float> keyframeTimes, s
 {
 	std::vector<float> samples(numMorphTargets);
 
-	if (time < keyframeTimes.front())
+	if (time <= keyframeTimes.front())
 	{
 		for (int i = 0; i < numMorphTargets; i++)
 		{
@@ -90,7 +90,7 @@ std::vector<float> SampleWeightsAt(float time, std::span<float> keyframeTimes, s
 
 	for (int i = 0; i < numMorphTargets; i++)
 	{
-		samples[i] = weightsA[i] * t + weightsB[i] * (1.0f - t);
+		samples[i] = weightsA[i] + (weightsB[i] - weightsA[i]) * t;
 	}
 
 	return samples;

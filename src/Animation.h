@@ -63,7 +63,7 @@ inline T SampleAt(float time, std::span<float> keyframeTimes, std::span<T> keyfr
 
 	if constexpr (translationOrScale)
 	{
-		return t * valueA + (1.0f - t) * valueB;
+		return valueA + (valueB - valueA) * t;
 	}
 	else
 	{
