@@ -1,8 +1,15 @@
 #pragma once
 
+#include <cstdint>
 #include <glad/glad.h>
+#include <tiny_gltf/tiny_gltf.h>
+#include "VertexAttribute.h"
 
-class Mesh
+struct Mesh
 {
-	GLuint VAO, VBO, IBO;
+	Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model);
+	std::vector<std::uint32_t> submeshCountVerticesOrIndices;
+	GLuint VAO;
+	VertexAttribute flags = VertexAttribute::POSITION;
+	bool hasIndexBuffer;
 };

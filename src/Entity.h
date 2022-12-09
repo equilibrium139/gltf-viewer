@@ -1,8 +1,16 @@
 #pragma once
 
-#include <glm/mat4x4.hpp>
+#include "Mesh.h"
+#include <string>
+#include "Transform.h"
+#include <vector>
 
 struct Entity
 {
-	glm::mat4 transform;
+	std::string name;
+	Transform transform;
+	std::vector<int> children;
+	int parent;
+	const Mesh* mesh = nullptr;
+	std::vector<float> morphTargetWeights;
 };
