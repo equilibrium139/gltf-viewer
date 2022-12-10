@@ -6,6 +6,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 //#include <glm/gtc/type_ptr.hpp>
@@ -27,10 +28,10 @@ public:
 
 	void use();
 
-	void SetBool(const char* name, bool value) const;
-	void SetInt(const char* name, int value) const;
-	void SetUint(const char* name, std::uint32_t value) const;
-	void SetFloat(const char* name, float value) const;
+	void SetBool(const char* name, bool value);
+	void SetInt(const char* name, int value);
+	void SetUint(const char* name, std::uint32_t value);
+	void SetFloat(const char* name, float value);
 	void SetMat4(const char* name, const float* value);
 	void SetMat4(const char* name, const float* value, int count);
 	void SetMat3(const char* name, const float* value);
@@ -41,6 +42,19 @@ public:
 	void SetVec3Array(const char* name, float* values, unsigned int count);
 private:
 	std::string get_file_contents(const char* path);
+	std::unordered_map<std::string, int> cachedUniformLocations;
+
+	int GetUniformLocation(const std::string& name)
+	{
+		auto iter = cachedUniformLocations.find(name);
+		if (iter != cachedUniformLocations.end())
+		{
+			return iter->second;
+		}
+		int location = glGetUniformLocation(id, name.c_str());
+		cachedUniformLocations[name] = location;
+		return location;
+	}
 };
 
 #endif // !SHADER_H
