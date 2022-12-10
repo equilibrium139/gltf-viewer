@@ -101,22 +101,19 @@ static int GetVertexSizeBytes(VertexAttribute attributes)
 
 static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interleavedBuffer, const tinygltf::Accessor& attrAccessor, int vertexSizeBytes, int attrOffset, const tinygltf::Model& model)
 {
-	const tinygltf::BufferView& accessorBV = model.bufferViews[attrAccessor.bufferView];
-	const tinygltf::Buffer& buffer = model.buffers[accessorBV.buffer];
+	const std::vector<std::uint8_t> accessorBytes = GetAccessorBytes(attrAccessor, model);
 
-	const std::uint8_t* gltfBufferAttrPtr = buffer.data.data() + accessorBV.byteOffset + attrAccessor.byteOffset;
-	const int accessorStride = attrAccessor.ByteStride(accessorBV);
+	const std::uint8_t* gltfBufferAttrPtr = accessorBytes.data();
+	const int accessorSizeBytes = GetAccessorTypeSizeInBytes(attrAccessor);
 
 	std::uint8_t* interleavedBufferAttrPtr = interleavedBuffer.data() + attrOffset;
 	const int interleavedAttributeStride = vertexSizeBytes;
 
-	int accessorTypeSizeBytes = tinygltf::GetComponentSizeInBytes(attrAccessor.componentType) * tinygltf::GetNumComponentsInType(attrAccessor.type);
-
 	for (int i = 0; i < attrAccessor.count; i++)
 	{
-		std::memcpy(interleavedBufferAttrPtr, gltfBufferAttrPtr, accessorTypeSizeBytes);
+		std::memcpy(interleavedBufferAttrPtr, gltfBufferAttrPtr, accessorSizeBytes);
 		interleavedBufferAttrPtr += interleavedAttributeStride;
-		gltfBufferAttrPtr += accessorStride;
+		gltfBufferAttrPtr += accessorSizeBytes;
 	}
 }
 

@@ -23,8 +23,12 @@ std::vector<float> GetFixedRateWeightValues(const tinygltf::Accessor& keyframeTi
 	assert(childAnimationDuration <= parentAnimationDuration);
 
 	const float secondsPerFrame = 1.0f / framesPerSecond;
-	std::span<float> keyframeTimes = GetAccessorDataView<float>(keyframeTimesAccessor, model);
-	std::span<float> keyframeValues = GetAccessorDataView<float>(keyframeValuesAccessor, model);
+
+	auto keyframeTimesData = GetAccessorBytes(keyframeTimesAccessor, model);
+	std::span<float> keyframeTimes((float*)keyframeTimesData.data(), keyframeTimesAccessor.count);
+
+	auto keyframeValuesData = GetAccessorBytes(keyframeValuesAccessor, model);
+	std::span<float> keyframeValues((float*)keyframeValuesData.data(), keyframeValuesAccessor.count);
 
 	const int numFixedRateFrames = std::ceil(parentAnimationDuration * framesPerSecond);
 	const int numFixedRateKeyframes = numFixedRateFrames + 1;

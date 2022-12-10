@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Entity.h"
-
+#include "GLTFHelpers.h"
 #include <glm/vec3.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <tiny_gltf/tiny_gltf.h>
@@ -79,8 +79,12 @@ std::vector<T> GetFixedRateTRSValues(const tinygltf::Accessor& keyframeTimesAcce
 	assert(childAnimationDuration <= parentAnimationDuration);
 
 	const float secondsPerFrame = 1.0f / framesPerSecond;
-	std::span<float> keyframeTimes = GetAccessorDataView<float>(keyframeTimesAccessor, model);
-	std::span<T> keyframeValues = GetAccessorDataView<T>(keyframeValuesAccessor, model);
+
+	auto keyframeTimesData = GetAccessorBytes(keyframeTimesAccessor, model);
+	std::span<float> keyframeTimes((float*)keyframeTimesData.data(), keyframeTimesAccessor.count);
+
+	auto keyframeValuesData = GetAccessorBytes(keyframeValuesAccessor, model);
+	std::span<T> keyframeValues((T*)keyframeValuesData.data(), keyframeValuesAccessor.count);
 
 	const int numFixedRateKeyframes = parentAnimationDuration * framesPerSecond + 1;
 	std::vector<T> fixedRateValues(numFixedRateKeyframes);
@@ -88,7 +92,7 @@ std::vector<T> GetFixedRateTRSValues(const tinygltf::Accessor& keyframeTimesAcce
 
 	for (int frame = 0; frame < numFixedRateKeyframes; frame++, time += secondsPerFrame)
 	{
-		fixedRateValues[frame] = SampleAt(time, keyframeTimes, keyframeValues);
+		fixedRateValues[frame] = SampleAt(time, keyframeTimes, (std::span<T>)keyframeValues);
 	}
 
 	return fixedRateValues;

@@ -52,7 +52,10 @@ void ProcessInput(GLFWwindow* window, Camera& camera, float dt)
 
 int main(int argc, char** argv)
 {
-    bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, argv[1]);
+    std::string filename = "SimpleSparseAccessor";
+    std::string filepath = "C:\\dev\\gltf-models\\" + filename + "\\glTF\\" + filename + ".gltf";
+
+    bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, filepath);
     //bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, argv[1]); // for binary glTF(.glb)
 
     if (!warn.empty()) {

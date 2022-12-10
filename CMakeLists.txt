@@ -13,6 +13,7 @@ src/Animation.h
 src/Camera.h
 src/Entity.h
 src/GLTFHelpers.h
+src/GLTFHelpers.cpp
 src/GLTFResources.cpp
 src/GLTFResources.h
 src/Mesh.cpp
