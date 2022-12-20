@@ -3,6 +3,27 @@
 #include <algorithm>
 #include "GLTFHelpers.h"
 
+std::vector<int> GetSceneNodeIndices(const tinygltf::Scene& scene, const tinygltf::Model& model)
+{
+	std::vector<int> sceneNodeIndices;
+	sceneNodeIndices.insert(sceneNodeIndices.end(), scene.nodes.begin(), scene.nodes.end());
+	int currentNodeIndex = 0;
+	while (currentNodeIndex != sceneNodeIndices.size())
+	{
+		const auto& node = model.nodes[currentNodeIndex];
+		sceneNodeIndices.insert(sceneNodeIndices.end(), node.children.begin(), node.children.end());
+	}
+	
+
+	for (int nodeIndex : scene.nodes)
+	{
+		sceneNodeIndices.push_back(nodeIndex);
+		auto& node = model.nodes[nodeIndex];
+		auto indices = GetNodeDescendantsIndices(node, model);
+		for ()
+	}
+}
+
 Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, GLTFResources* resources)
 	:resources(resources)
 {

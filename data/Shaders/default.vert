@@ -1,14 +1,20 @@
 layout(location = 0) in vec3 aBasePos;
+
 #ifdef HAS_NORMALS
 layout(location = 1) in vec3 aBaseNormal;
 #endif // HAS_NORMALS
 
+#ifdef HAS_JOINTS
+layout(location = 2) in vec4 aJoints;
+layout(location = 3) in vec4 aWeights;
+#endif // HAS_JOINTS
+
 #ifdef HAS_MORPH_TARGETS
-layout(location = 2) in vec3 aMorphBasePosDifference1;
-layout(location = 3) in vec3 aMorphBasePosDifference2;
+layout(location = 4) in vec3 aMorphBasePosDifference1;
+layout(location = 5) in vec3 aMorphBasePosDifference2;
     #ifdef HAS_NORMALS
-    layout(location = 4) in vec3 aMorphBaseNormalDifference1;
-    layout(location = 5) in vec3 aMorphBaseNormalDifference2;
+    layout(location = 6) in vec3 aMorphBaseNormalDifference1;
+    layout(location = 7) in vec3 aMorphBaseNormalDifference2;
     #endif // HAS_NORMALS
 #endif // HAS_MORPH_TARGETS
 
@@ -18,6 +24,10 @@ uniform mat4 projection;
 #ifdef HAS_NORMALS
 uniform mat3 normalMatrixVS;
 #endif // HAS_NORMALS
+
+#ifdef HAS_JOINTS
+uniform mat4 skinningMatrices[128];
+#endif // HAS_JOINTS
 
 #ifdef HAS_MORPH_TARGETS
 uniform float morph1Weight; 
@@ -37,6 +47,16 @@ void main()
 #ifdef HAS_NORMALS
     surfaceNormalVS = aBaseNormal;
 #endif // HAS_NORMALS
+
+// TODO: make sure skeletal animation is independent of morph target animation
+#ifdef HAS_JOINTS
+    vec4 modelSpaceVertex = vec4(surfacePosVS, 1.0);
+    mat4 modelSpaceMatrix = aWeights.x * skinningMatrices[aJoints.x] +
+                            aWeights.y * skinningMatrices[aJoints.y] +
+                            aWeights.z * skinningMatrices[aJoints.z] +
+                            aWeights.w * skinningMatrices[aJoints.w];
+    surfacePosVS = vec3(modelSpaceMatrix * modelSpaceVertex);
+#endif // HAS_JOINTS
 
 #ifdef HAS_MORPH_TARGETS
     surfacePosVS += morph1Weight * aMorphBasePosDifference1 +

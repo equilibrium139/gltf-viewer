@@ -12,11 +12,15 @@ static const std::unordered_map<std::string, VertexAttribute> vertexAttributeMap
 {
 	{"POSITION", VertexAttribute::POSITION},
 	{"NORMAL", VertexAttribute::NORMAL},
+	{"JOINTS_0", VertexAttribute::WEIGHTS},
+	{"WEIGHTS_0", VertexAttribute::JOINTS}
 };
 static const std::vector<VertexAttribute> vertexAttributeOrdering =
 {
 	VertexAttribute::POSITION,
 	VertexAttribute::NORMAL,
+	VertexAttribute::WEIGHTS,
+	VertexAttribute::JOINTS,
 	VertexAttribute::MORPH_TARGET0_POSITION,
 	VertexAttribute::MORPH_TARGET1_POSITION,
 	VertexAttribute::MORPH_TARGET0_NORMAL,
@@ -26,6 +30,8 @@ static const std::unordered_map<VertexAttribute, int> attributeByteSizes =
 {
 	{VertexAttribute::POSITION, 12},
 	{VertexAttribute::NORMAL, 12},
+	{VertexAttribute::WEIGHTS, 16}, // TODO: maybe compress this to uint32
+	{VertexAttribute::JOINTS, 16},
 	{VertexAttribute::MORPH_TARGET0_POSITION, 12},
 	{VertexAttribute::MORPH_TARGET1_POSITION, 12},
 	{VertexAttribute::MORPH_TARGET0_NORMAL, 12},
@@ -53,7 +59,7 @@ static int GetAttributeByteOffset(VertexAttribute attributes, VertexAttribute at
 	return -1;
 }
 
-static VertexAttribute GetPrimitiveVertexAttributes(const tinygltf::Primitive& primitive)
+static VertexAttribute GetPrimitiveVertexLayout(const tinygltf::Primitive& primitive)
 {
 	VertexAttribute attributes = (VertexAttribute)0;
 
@@ -91,6 +97,8 @@ static int GetVertexSizeBytes(VertexAttribute attributes)
 
 	if (HasFlag(attributes, VertexAttribute::POSITION)) size += 12;
 	if (HasFlag(attributes, VertexAttribute::NORMAL)) size += 12;
+	if (HasFlag(attributes, VertexAttribute::WEIGHTS)) size += 16;
+	if (HasFlag(attributes, VertexAttribute::JOINTS)) size += 16;
 	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET0_POSITION)) size += 12;
 	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET1_POSITION)) size += 12;
 	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET0_NORMAL)) size += 12;
@@ -136,6 +144,18 @@ static std::vector<std::uint8_t> GetInterleavedVertexBuffer(const tinygltf::Prim
 		int normalAccessorIndex = primitive.attributes.find("NORMAL")->second;
 		const tinygltf::Accessor& normalsAccessor = model.accessors[normalAccessorIndex];
 		FillInterleavedBufferWithAttribute(buffer, normalsAccessor, vertexSizeBytes, GetAttributeByteOffset(attributes, VertexAttribute::NORMAL), model);
+	}
+	if (HasFlag(attributes, VertexAttribute::WEIGHTS))
+	{
+		assert(HasFlag(attributes, VertexAttribute::JOINTS));
+
+		int weightsAccessorIndex = primitive.attributes.find("WEIGHTS_0")->second;
+		const tinygltf::Accessor& weightsAccessor = model.accessors[weightsAccessorIndex];
+		FillInterleavedBufferWithAttribute(buffer, weightsAccessor, vertexSizeBytes, GetAttributeByteOffset(attributes, VertexAttribute::WEIGHTS), model);
+
+		int jointsAccessorIndex = primitive.attributes.find("JOINTS_0")->second;
+		const tinygltf::Accessor& jointsAccessor = model.accessors[jointsAccessorIndex];
+		FillInterleavedBufferWithAttribute(buffer, jointsAccessor, vertexSizeBytes, GetAttributeByteOffset(attributes, VertexAttribute::JOINTS), model);
 	}
 	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET0_POSITION))
 	{
@@ -202,7 +222,11 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 {
 	assert(mesh.primitives.size() > 0);
 
-	flags = GetPrimitiveVertexAttributes(mesh.primitives[0]);
+	flags = GetPrimitiveVertexLayout(mesh.primitives[0]);
+	bool hasJoints = HasFlag(flags, VertexAttribute::JOINTS);
+	bool hasMorphTargets = HasFlag(flags, VertexAttribute::MORPH_TARGET0_POSITION);
+	assert((!hasJoints && !hasMorphTargets) || (hasJoints != hasMorphTargets) && "Morph targets and skeletal animation on same mesh not supported");
+
 	const int vertexSizeBytes = GetVertexSizeBytes(flags);
 	hasIndexBuffer = mesh.primitives[0].indices >= 0;
 
@@ -216,7 +240,7 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 	{
 		assert(primitive.mode == GL_TRIANGLES);
 		assert(primitive.indices >= 0 == hasIndexBuffer && "Mesh primitives must all have indices or all not have them.");
-		VertexAttribute primitiveFlags = GetPrimitiveVertexAttributes(primitive);
+		VertexAttribute primitiveFlags = GetPrimitiveVertexLayout(primitive);
 		assert(flags == primitiveFlags && "All mesh primitives must have the same attributes");
 		std::vector<std::uint8_t> primitiveVertexBuffer = GetInterleavedVertexBuffer(primitive, primitiveFlags, model);
 		vertexBuffer.insert(vertexBuffer.end(), primitiveVertexBuffer.begin(), primitiveVertexBuffer.end());
@@ -246,6 +270,8 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBufferData(GL_ARRAY_BUFFER, vertexBuffer.size(), vertexBuffer.data(), GL_STATIC_DRAW);
 
+	// Don't change attribute indices, shaders rely on them being in this order
+
 	int offset = 0;
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
@@ -257,24 +283,36 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += 12;
 	}
+	if (HasFlag(flags, VertexAttribute::WEIGHTS))
+	{
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		offset += 16;
+
+		// TODO: update when joints changed to more compact representation
+		glEnableVertexAttribArray(3);
+		glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		offset += 16;
+
+	}
 	if (HasFlag(flags, VertexAttribute::MORPH_TARGET0_POSITION))
 	{
 		assert(HasFlag(flags, VertexAttribute::MORPH_TARGET1_POSITION));
-		glEnableVertexAttribArray(2);
-		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += 12;
-		glEnableVertexAttribArray(3);
-		glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += 12;
-	}
-	if (HasFlag(flags, VertexAttribute::MORPH_TARGET0_NORMAL))
-	{
-		assert(HasFlag(flags, VertexAttribute::MORPH_TARGET1_NORMAL));
 		glEnableVertexAttribArray(4);
 		glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += 12;
 		glEnableVertexAttribArray(5);
 		glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		offset += 12;
+	}
+	if (HasFlag(flags, VertexAttribute::MORPH_TARGET0_NORMAL))
+	{
+		assert(HasFlag(flags, VertexAttribute::MORPH_TARGET1_NORMAL));
+		glEnableVertexAttribArray(6);
+		glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		offset += 12;
+		glEnableVertexAttribArray(7);
+		glVertexAttribPointer(7, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += 12;
 	}
 	

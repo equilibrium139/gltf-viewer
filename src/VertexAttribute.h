@@ -7,10 +7,12 @@ enum class VertexAttribute : std::uint32_t
 {
     POSITION = 1 << 0,
     NORMAL = 1 << 1,
-    MORPH_TARGET0_POSITION = 1 << 2,
-    MORPH_TARGET1_POSITION = 1 << 3,
-    MORPH_TARGET0_NORMAL = 1 << 4,
-    MORPH_TARGET1_NORMAL = 1 << 5,
+    WEIGHTS = 1 << 2,
+    JOINTS = 1 << 3,
+    MORPH_TARGET0_POSITION = 1 << 4,
+    MORPH_TARGET1_POSITION = 1 << 5,
+    MORPH_TARGET0_NORMAL = 1 << 6,
+    MORPH_TARGET1_NORMAL = 1 << 7,
 };
 
 inline VertexAttribute operator | (VertexAttribute lhs, VertexAttribute rhs)
