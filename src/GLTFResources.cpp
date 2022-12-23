@@ -1,5 +1,6 @@
 #include "GLTFResources.h"
 
+#include "GLTFHelpers.h"
 #include <string>
 #include <tuple>
 #include <vector>
@@ -11,6 +12,10 @@ static std::vector<std::string> GetShaderDefines(VertexAttribute flags)
 	if (HasFlag(flags, VertexAttribute::NORMAL))
 	{
 		defines.emplace_back("HAS_NORMALS");
+	}
+	if (HasFlag(flags, VertexAttribute::JOINTS))
+	{
+		defines.emplace_back("HAS_JOINTS");
 	}
 	if (HasFlag(flags, VertexAttribute::MORPH_TARGET0_POSITION))
 	{

@@ -5,8 +5,8 @@ layout(location = 1) in vec3 aBaseNormal;
 #endif // HAS_NORMALS
 
 #ifdef HAS_JOINTS
-layout(location = 2) in vec4 aJoints;
-layout(location = 3) in vec4 aWeights;
+layout(location = 2) in vec4 aWeights;
+layout(location = 3) in uint aJoints;
 #endif // HAS_JOINTS
 
 #ifdef HAS_MORPH_TARGETS
@@ -48,14 +48,16 @@ void main()
     surfaceNormalVS = aBaseNormal;
 #endif // HAS_NORMALS
 
+    mat4 skinningMatrix = mat4(1.0);
+
 // TODO: make sure skeletal animation is independent of morph target animation
 #ifdef HAS_JOINTS
     vec4 modelSpaceVertex = vec4(surfacePosVS, 1.0);
-    mat4 modelSpaceMatrix = aWeights.x * skinningMatrices[aJoints.x] +
-                            aWeights.y * skinningMatrices[aJoints.y] +
-                            aWeights.z * skinningMatrices[aJoints.z] +
-                            aWeights.w * skinningMatrices[aJoints.w];
-    surfacePosVS = vec3(modelSpaceMatrix * modelSpaceVertex);
+    skinningMatrix = aWeights.x * skinningMatrices[aJoints & 0xFFu] +
+                  aWeights.y * skinningMatrices[(aJoints >> 8) & 0xFFu] +
+                  aWeights.z * skinningMatrices[(aJoints >> 16) & 0xFFu] +
+                  aWeights.w * skinningMatrices[(aJoints >> 24) & 0xFFu];
+    surfacePosVS = vec3(skinningMatrix * modelSpaceVertex);
 #endif // HAS_JOINTS
 
 #ifdef HAS_MORPH_TARGETS
@@ -63,14 +65,20 @@ void main()
                     morph2Weight * aMorphBasePosDifference2;
     #ifdef HAS_NORMALS               
         surfaceNormalVS += morph1Weight * aMorphBaseNormalDifference1 +
-                        morph2Weight * aMorphBaseNormalDifference2;
+                           morph2Weight * aMorphBaseNormalDifference2;
     #endif // HAS_NORMALS
 #endif // HAS_MORPH_TARGETS
 
     surfacePosVS = vec3(modelView * vec4(surfacePosVS, 1.0));
 
 #ifdef HAS_NORMALS
-    surfaceNormalVS = normalize(normalMatrixVS * surfaceNormalVS);
+    #ifdef HAS_JOINTS
+        // take into account skinning matrix transformation
+        mat3 finalNormalMatrix = normalMatrixVS * transpose(inverse(mat3(skinningMatrix)));
+        surfaceNormalVS = normalize(finalNormalMatrix * surfaceNormalVS);
+    #else
+        surfaceNormalVS = normalize(normalMatrixVS * surfaceNormalVS);
+    #endif // HAS_JOINTS
 #endif // HAS_NORMALS
 
     gl_Position = projection * vec4(surfacePosVS, 1.0);

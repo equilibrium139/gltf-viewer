@@ -5,6 +5,7 @@
 #include "Entity.h"
 #include "GLTFResources.h"
 #include "Shader.h"
+#include "Skeleton.h"
 #include "tiny_gltf/tiny_gltf.h"
 #include <vector>
 
@@ -21,5 +22,6 @@ private:
 	void SetEntityParents(Entity& entity, int entityIndex, int parent);
 	std::vector<Animation> animations;
 	std::vector<Entity> entities;
+	std::vector<Skeleton> skeletons;
 	GLTFResources* resources;
 };

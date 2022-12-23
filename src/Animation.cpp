@@ -99,3 +99,40 @@ std::vector<float> SampleWeightsAt(float time, std::span<float> keyframeTimes, s
 
 	return samples;
 }
+
+std::vector<glm::mat4> ComputeGlobalMatrices(const Skeleton& skeleton, const std::vector<Entity>& entities)
+{
+	const int numJoints = skeleton.joints.size();
+	std::vector<glm::mat4> globalMatrices(numJoints);
+
+	// Set all joint matrices to their local matrices
+	for (int i = 0; i < numJoints; i++)
+	{
+		globalMatrices[i] = entities[skeleton.joints[i].entityIndex].transform.GetMatrix();
+	}
+
+	for (int i = 1; i < numJoints; i++)
+	{
+		auto& joint = skeleton.joints[i];
+		if (joint.parent >= 0)
+		{
+			globalMatrices[i] = globalMatrices[joint.parent] * globalMatrices[i];
+		}
+	}
+
+	return globalMatrices;
+}
+
+std::vector<glm::mat4> ComputeSkinningMatrices(const Skeleton& skeleton, const std::vector<Entity>& entities)
+{
+	auto skinningMatrices = ComputeGlobalMatrices(skeleton, entities);
+	const int numJoints = skinningMatrices.size();
+
+	for (int i = 0; i < numJoints; i++)
+	{
+		const auto localToJoint = glm::mat4(skeleton.joints[i].localToJoint);
+		skinningMatrices[i] = skinningMatrices[i] * localToJoint;
+	}
+
+	return skinningMatrices;
+}

@@ -2,6 +2,7 @@
 
 #include "Mesh.h"
 #include "Shader.h"
+#include "Skeleton.h"
 #include "tiny_gltf/tiny_gltf.h"
 #include "VertexAttribute.h"
 #include <vector>

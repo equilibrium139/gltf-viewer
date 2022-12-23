@@ -3,51 +3,19 @@
 #include <algorithm>
 #include "GLTFHelpers.h"
 
-std::vector<int> GetSceneNodeIndices(const tinygltf::Scene& scene, const tinygltf::Model& model)
-{
-	std::vector<int> sceneNodeIndices;
-	sceneNodeIndices.insert(sceneNodeIndices.end(), scene.nodes.begin(), scene.nodes.end());
-	int currentNodeIndex = 0;
-	while (currentNodeIndex != sceneNodeIndices.size())
-	{
-		const auto& node = model.nodes[currentNodeIndex];
-		sceneNodeIndices.insert(sceneNodeIndices.end(), node.children.begin(), node.children.end());
-	}
-	
-
-	for (int nodeIndex : scene.nodes)
-	{
-		sceneNodeIndices.push_back(nodeIndex);
-		auto& node = model.nodes[nodeIndex];
-		auto indices = GetNodeDescendantsIndices(node, model);
-		for ()
-	}
-}
-
 Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, GLTFResources* resources)
 	:resources(resources)
 {
-	std::unordered_map<int, int> modelNodeToSceneEntity; // use for animations and other GLTF constructs which refer to model node indices
-	int sceneNodeIndex = 0;
-	for (int modelNodeIndex : scene.nodes)
-	{
-		modelNodeToSceneEntity[sceneNodeIndex] = modelNodeIndex;
-		sceneNodeIndex++;
-	}
+	assert(model.scenes.size() == 1); // for now
 
+	// Nodes
 	for (const auto& node : model.nodes)
 	{
 		entities.emplace_back();
 		Entity& entity = entities.back();
 		entity.name = node.name;
 		entity.transform = GetNodeTransform(node);
-		std::transform(node.children.begin(), node.children.end(), std::back_inserter(entity.children),
-			[&modelNodeToSceneEntity](int childIndex)
-			{ 
-				auto iter = modelNodeToSceneEntity.find(childIndex);
-				assert(iter != modelNodeToSceneEntity.end());
-				return iter->second;
-			});
+		entity.children = node.children;
 
 		// TODO: add support for cameras
 		if (node.mesh >= 0)
@@ -62,67 +30,112 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, GLTFRes
 		}
 	}
 
+	// Set entity parent
 	for (int i = 0; i < entities.size(); i++)
 	{
-		SetEntityParents(entities[i], i, -1);
+		const auto& entity = entities[i];
+		for (int j = 0; j < entity.children.size(); j++)
+		{
+			auto& child = entities[entity.children[j]];
+			child.parent = i;
+		}
 	}
 
+	// Skeletons
+	for (const tinygltf::Skin& skin : model.skins)
+	{
+		skeletons.emplace_back();
+		auto& skeleton = skeletons.back();
+		int numJoints = skin.joints.size();
+
+		std::vector<std::uint8_t> inverseBindMatricesBytes = GetAccessorBytes(model.accessors[skin.inverseBindMatrices], model);
+		assert(inverseBindMatricesBytes.size() == sizeof(glm::mat4) * numJoints);
+		std::span<glm::mat4> inverseBindMatrices((glm::mat4*)(inverseBindMatricesBytes.data()), numJoints);
+
+		for (int i = 0; i < numJoints; i++)
+		{
+			skeleton.joints.emplace_back();
+			auto& joint = skeleton.joints.back();
+			joint.localToJoint = glm::mat4x3(inverseBindMatrices[i]);
+			joint.entityIndex = skin.joints[i];
+			int parentEntityIndex = entities[joint.entityIndex].parent;
+			if (parentEntityIndex < 0)
+			{
+				joint.parent = -1;
+			}
+			else
+			{
+				joint.parent = 0;
+				while (joint.parent < skeleton.joints.size() && skeleton.joints[joint.parent].entityIndex != parentEntityIndex)
+				{
+					joint.parent++;
+				}
+				if (joint.parent >= skeleton.joints.size()) joint.parent = -1;
+			}
+		}
+	}
+
+	// After initializing skeletons, set entity skeletons
+	for (int i = 0; i < entities.size(); i++)
+	{
+		if (model.nodes[i].skin >= 0)
+		{
+			entities[i].skeleton = &skeletons[model.nodes[i].skin];
+		}
+	}
+
+	// Animations
 	for (const auto& gltfAnimation : model.animations)
 	{
-		bool animationBelongsToScene = modelNodeToSceneEntity.contains(gltfAnimation.channels[0].target_node);
-
-		if (animationBelongsToScene)
-		{
-			animations.emplace_back();
-			Animation& animation = animations.back();
+		animations.emplace_back();
+		Animation& animation = animations.back();
 			
-			// TODO: set animation duration to multiple of (1.0 / framesPerSecond), AKA secondsPerFrame
-			double animationDurationSeconds = GetAnimationDurationSeconds(gltfAnimation, model);
-			animation.durationSeconds = (float)animationDurationSeconds; 
+		// TODO: set animation duration to multiple of (1.0 / framesPerSecond), AKA secondsPerFrame
+		double animationDurationSeconds = GetAnimationDurationSeconds(gltfAnimation, model);
+		animation.durationSeconds = (float)animationDurationSeconds; 
 
-			for (const auto& channel : gltfAnimation.channels)
+		for (const auto& channel : gltfAnimation.channels)
+		{
+			Entity* sceneEntity = &entities[channel.target_node];
+			
+			// Entity might already have another animated channel in this animation, check if so
+			auto entityAnimationIter = std::find_if(animation.entityAnimations.begin(), animation.entityAnimations.end(),
+				[sceneEntity](const Animation::EntityAnimation& entityAnimation)
+				{
+					return entityAnimation.entity == sceneEntity;
+				});
+			Animation::EntityAnimation* entityAnimation;
+			if (entityAnimationIter != animation.entityAnimations.end())
 			{
-				auto sceneEntityIndexIter = modelNodeToSceneEntity.find(channel.target_node);
-				assert(sceneEntityIndexIter != modelNodeToSceneEntity.end());
-				Entity* sceneEntity = &entities[sceneEntityIndexIter->second];
-				auto entityAnimationIter = std::find_if(animation.entityAnimations.begin(), animation.entityAnimations.end(),
-					[sceneEntity](const Animation::EntityAnimation& entityAnimation)
-					{
-						return entityAnimation.entity == sceneEntity;
-					});
-				Animation::EntityAnimation* entityAnimation;
-				if (entityAnimationIter != animation.entityAnimations.end())
-				{
-					entityAnimation = &(*entityAnimationIter);
-				}
-				else
-				{
-					animation.entityAnimations.emplace_back();
-					entityAnimation = &animation.entityAnimations.back();
-				}
+				entityAnimation = &(*entityAnimationIter);
+			}
+			else
+			{
+				animation.entityAnimations.emplace_back();
+				entityAnimation = &animation.entityAnimations.back();
+			}
 				
-				entityAnimation->entity = sceneEntity;
+			entityAnimation->entity = sceneEntity;
 
-				const auto& sampler = gltfAnimation.samplers[channel.sampler];
-				assert(sampler.interpolation == "LINEAR" && "Only linear interpolation supported for now.");
-				const auto& keyframeTimesAccessor = model.accessors[sampler.input];
-				const auto& keyframeValuesAccessor = model.accessors[sampler.output];
-				if (channel.target_path == "translation")
-				{
-					entityAnimation->translations = GetFixedRateTRSValues<glm::vec3>(keyframeTimesAccessor, keyframeValuesAccessor, model, animation.framesPerSecond, animationDurationSeconds);
-				}
-				else if (channel.target_path == "scale")
-				{
-					entityAnimation->scales = GetFixedRateTRSValues<glm::vec3>(keyframeTimesAccessor, keyframeValuesAccessor, model, animation.framesPerSecond, animationDurationSeconds);
-				}
-				else if (channel.target_path == "rotation")
-				{
-					entityAnimation->rotations = GetFixedRateTRSValues<glm::quat>(keyframeTimesAccessor, keyframeValuesAccessor, model, animation.framesPerSecond, animationDurationSeconds);
-				}
-				else
-				{
-					entityAnimation->weights = GetFixedRateWeightValues(keyframeTimesAccessor, keyframeValuesAccessor, model, animation.framesPerSecond, animationDurationSeconds);
-				}
+			const auto& sampler = gltfAnimation.samplers[channel.sampler];
+			assert(sampler.interpolation == "LINEAR" && "Only linear interpolation supported for now.");
+			const auto& keyframeTimesAccessor = model.accessors[sampler.input];
+			const auto& keyframeValuesAccessor = model.accessors[sampler.output];
+			if (channel.target_path == "translation")
+			{
+				entityAnimation->translations = GetFixedRateTRSValues<glm::vec3>(keyframeTimesAccessor, keyframeValuesAccessor, model, animation.framesPerSecond, animationDurationSeconds);
+			}
+			else if (channel.target_path == "scale")
+			{
+				entityAnimation->scales = GetFixedRateTRSValues<glm::vec3>(keyframeTimesAccessor, keyframeValuesAccessor, model, animation.framesPerSecond, animationDurationSeconds);
+			}
+			else if (channel.target_path == "rotation")
+			{
+				entityAnimation->rotations = GetFixedRateTRSValues<glm::quat>(keyframeTimesAccessor, keyframeValuesAccessor, model, animation.framesPerSecond, animationDurationSeconds);
+			}
+			else
+			{
+				entityAnimation->weights = GetFixedRateWeightValues(keyframeTimesAccessor, keyframeValuesAccessor, model, animation.framesPerSecond, animationDurationSeconds);
 			}
 		}
 	}
@@ -212,6 +225,11 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 			shader.SetVec3("pointLight.positionVS", glm::vec3(0.0f, 0.0f, 0.0f));
 			shader.SetVec3("pointLight.color", glm::vec3(0.5f, 0.5f, 0.5f));
 		}
+		if (entity.skeleton != nullptr)
+		{
+			auto skinningMatrices = ComputeSkinningMatrices(*entity.skeleton, entities);
+			shader.SetMat4("skinningMatrices", glm::value_ptr(skinningMatrices.front()), (int)skinningMatrices.size());
+		}
 		bool hasMorphTargets = HasFlag(entity.mesh->flags, VertexAttribute::MORPH_TARGET0_POSITION);
 		if (hasMorphTargets)
 		{
@@ -240,15 +258,5 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 	for (int childIndex : entity.children)
 	{
 		RenderEntity(entities[childIndex], globalTransform, view, projection);
-	}
-}
-
-void Scene::SetEntityParents(Entity& entity, int entityIndex, int parent)
-{
-	entity.parent = parent;
-
-	for (int childIndex : entity.children)
-	{
-		SetEntityParents(entities[childIndex], childIndex, entityIndex);
 	}
 }

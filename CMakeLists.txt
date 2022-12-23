@@ -22,6 +22,7 @@ src/Scene.h
 src/Scene.cpp
 src/Shader.cpp
 src/Shader.h
+src/Skeleton.h
 src/Transform.h
 src/Transform.cpp
 src/VertexAttribute.h

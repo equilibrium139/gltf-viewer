@@ -30,8 +30,8 @@ static const std::unordered_map<VertexAttribute, int> attributeByteSizes =
 {
 	{VertexAttribute::POSITION, 12},
 	{VertexAttribute::NORMAL, 12},
-	{VertexAttribute::WEIGHTS, 16}, // TODO: maybe compress this to uint32
-	{VertexAttribute::JOINTS, 16},
+	{VertexAttribute::WEIGHTS, 16},
+	{VertexAttribute::JOINTS, 4},
 	{VertexAttribute::MORPH_TARGET0_POSITION, 12},
 	{VertexAttribute::MORPH_TARGET1_POSITION, 12},
 	{VertexAttribute::MORPH_TARGET0_NORMAL, 12},
@@ -95,33 +95,77 @@ static int GetVertexSizeBytes(VertexAttribute attributes)
 {
 	int size = 0;
 
-	if (HasFlag(attributes, VertexAttribute::POSITION)) size += 12;
-	if (HasFlag(attributes, VertexAttribute::NORMAL)) size += 12;
-	if (HasFlag(attributes, VertexAttribute::WEIGHTS)) size += 16;
-	if (HasFlag(attributes, VertexAttribute::JOINTS)) size += 16;
-	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET0_POSITION)) size += 12;
-	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET1_POSITION)) size += 12;
-	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET0_NORMAL)) size += 12;
-	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET1_NORMAL)) size += 12;
+	if (HasFlag(attributes, VertexAttribute::POSITION)) size += attributeByteSizes.find(VertexAttribute::POSITION)->second;
+	if (HasFlag(attributes, VertexAttribute::NORMAL)) size += attributeByteSizes.find(VertexAttribute::NORMAL)->second;
+	if (HasFlag(attributes, VertexAttribute::WEIGHTS)) size += attributeByteSizes.find(VertexAttribute::WEIGHTS)->second;
+	if (HasFlag(attributes, VertexAttribute::JOINTS)) size += attributeByteSizes.find(VertexAttribute::JOINTS)->second;
+	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET0_POSITION)) size += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_POSITION)->second;
+	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET1_POSITION)) size += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_POSITION)->second;
+	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET0_NORMAL)) size += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_NORMAL)->second;
+	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET1_NORMAL)) size += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_NORMAL)->second;
 
 	return size;
 }
 
-static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interleavedBuffer, const tinygltf::Accessor& attrAccessor, int vertexSizeBytes, int attrOffset, const tinygltf::Model& model)
+static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interleavedBuffer, std::span<const std::uint8_t> attrData, int attrSizeBytes, int attrOffset, int vertexSizeBytes, int numVertices)
 {
-	const std::vector<std::uint8_t> accessorBytes = GetAccessorBytes(attrAccessor, model);
-
-	const std::uint8_t* gltfBufferAttrPtr = accessorBytes.data();
-	const int accessorSizeBytes = GetAccessorTypeSizeInBytes(attrAccessor);
+	const std::uint8_t* attrDataPtr = attrData.data();
 
 	std::uint8_t* interleavedBufferAttrPtr = interleavedBuffer.data() + attrOffset;
 	const int interleavedAttributeStride = vertexSizeBytes;
 
-	for (int i = 0; i < attrAccessor.count; i++)
+	for (int i = 0; i < numVertices; i++)
 	{
-		std::memcpy(interleavedBufferAttrPtr, gltfBufferAttrPtr, accessorSizeBytes);
+		std::memcpy(interleavedBufferAttrPtr, attrDataPtr, attrSizeBytes);
 		interleavedBufferAttrPtr += interleavedAttributeStride;
-		gltfBufferAttrPtr += accessorSizeBytes;
+		attrDataPtr += attrSizeBytes;
+	}
+}
+
+static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interleavedBuffer, const tinygltf::Accessor& accessor, int vertexSizeBytes, VertexAttribute attribute, VertexAttribute attributes, const tinygltf::Model& model)
+{
+	// Positions, normals, and tangents are always float vec3 so we can always treat them the same, but the other types can have different component types
+	// so they need to be converted to a single type
+	switch (attribute)
+	{
+	case VertexAttribute::POSITION: case VertexAttribute::NORMAL: 
+	case VertexAttribute::MORPH_TARGET0_POSITION: case VertexAttribute::MORPH_TARGET1_POSITION:
+	case VertexAttribute::MORPH_TARGET0_NORMAL: case VertexAttribute::MORPH_TARGET1_NORMAL: // TODO: add tangents
+		FillInterleavedBufferWithAttribute(interleavedBuffer, GetAccessorBytes(accessor, model), attributeByteSizes.find(attribute)->second, GetAttributeByteOffset(attributes, attribute), vertexSizeBytes, accessor.count);
+		break;
+	case VertexAttribute::WEIGHTS:
+	{
+		assert(accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT && "Normalized unsigned byte and unsigned short not supported for now");
+		auto data = GetAccessorBytes(accessor, model);
+		std::span<glm::vec4> stuff((glm::vec4*)data.data(), accessor.count);
+		FillInterleavedBufferWithAttribute(interleavedBuffer, GetAccessorBytes(accessor, model), attributeByteSizes.find(attribute)->second, GetAttributeByteOffset(attributes, attribute), vertexSizeBytes, accessor.count);
+		break;
+	}
+	case VertexAttribute::JOINTS:
+		if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+		{
+			FillInterleavedBufferWithAttribute(interleavedBuffer, GetAccessorBytes(accessor, model), attributeByteSizes.find(attribute)->second, GetAttributeByteOffset(attributes, attribute), vertexSizeBytes, accessor.count);
+		}
+		else
+		{
+			assert(accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT);
+
+			// Convert from unsigned short to unsigned byte
+			auto jointBytes = GetAccessorBytes(accessor, model);
+			std::span<glm::u16vec4> joints((glm::u16vec4*)jointBytes.data(), accessor.count);
+			std::vector<glm::u8vec4> jointsAsUnsignedBytes(accessor.count);
+			std::transform(joints.begin(), joints.end(), jointsAsUnsignedBytes.begin(),
+				[](glm::u16vec4 indices)
+				{
+					assert(indices.x < 255 && indices.y < 255 && indices.z < 255 && indices.w < 255);
+					return glm::u8vec4(indices);
+				});
+
+			std::span<const std::uint8_t> attrBytes((std::uint8_t*)jointsAsUnsignedBytes.data(), sizeof(glm::u8vec4) * jointsAsUnsignedBytes.size());
+
+			FillInterleavedBufferWithAttribute(interleavedBuffer, attrBytes, attributeByteSizes.find(attribute)->second, GetAttributeByteOffset(attributes, attribute), vertexSizeBytes, accessor.count);
+		}
+		break;
 	}
 }
 
@@ -137,13 +181,13 @@ static std::vector<std::uint8_t> GetInterleavedVertexBuffer(const tinygltf::Prim
 
 	std::vector<std::uint8_t> buffer(vertexSizeBytes * numVertices);
 
-	FillInterleavedBufferWithAttribute(buffer, positionsAccessor, vertexSizeBytes, GetAttributeByteOffset(attributes, VertexAttribute::POSITION), model);
+	FillInterleavedBufferWithAttribute(buffer, positionsAccessor, vertexSizeBytes, VertexAttribute::POSITION, attributes, model);
 	
 	if (HasFlag(attributes, VertexAttribute::NORMAL))
 	{
 		int normalAccessorIndex = primitive.attributes.find("NORMAL")->second;
 		const tinygltf::Accessor& normalsAccessor = model.accessors[normalAccessorIndex];
-		FillInterleavedBufferWithAttribute(buffer, normalsAccessor, vertexSizeBytes, GetAttributeByteOffset(attributes, VertexAttribute::NORMAL), model);
+		FillInterleavedBufferWithAttribute(buffer, normalsAccessor, vertexSizeBytes, VertexAttribute::NORMAL, attributes, model);
 	}
 	if (HasFlag(attributes, VertexAttribute::WEIGHTS))
 	{
@@ -151,35 +195,35 @@ static std::vector<std::uint8_t> GetInterleavedVertexBuffer(const tinygltf::Prim
 
 		int weightsAccessorIndex = primitive.attributes.find("WEIGHTS_0")->second;
 		const tinygltf::Accessor& weightsAccessor = model.accessors[weightsAccessorIndex];
-		FillInterleavedBufferWithAttribute(buffer, weightsAccessor, vertexSizeBytes, GetAttributeByteOffset(attributes, VertexAttribute::WEIGHTS), model);
+		FillInterleavedBufferWithAttribute(buffer, weightsAccessor, vertexSizeBytes, VertexAttribute::WEIGHTS, attributes, model);
 
 		int jointsAccessorIndex = primitive.attributes.find("JOINTS_0")->second;
 		const tinygltf::Accessor& jointsAccessor = model.accessors[jointsAccessorIndex];
-		FillInterleavedBufferWithAttribute(buffer, jointsAccessor, vertexSizeBytes, GetAttributeByteOffset(attributes, VertexAttribute::JOINTS), model);
+		FillInterleavedBufferWithAttribute(buffer, jointsAccessor, vertexSizeBytes, VertexAttribute::JOINTS, attributes, model);
 	}
 	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET0_POSITION))
 	{
 		int accessorIndex = primitive.targets[0].find("POSITION")->second;
 		const tinygltf::Accessor& accessor = model.accessors[accessorIndex];
-		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, GetAttributeByteOffset(attributes, VertexAttribute::MORPH_TARGET0_POSITION), model);
+		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, VertexAttribute::MORPH_TARGET0_POSITION, attributes, model);
 	}
 	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET1_POSITION))
 	{
 		int accessorIndex = primitive.targets[1].find("POSITION")->second;
 		const tinygltf::Accessor& accessor = model.accessors[accessorIndex];
-		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, GetAttributeByteOffset(attributes, VertexAttribute::MORPH_TARGET1_POSITION), model);
+		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, VertexAttribute::MORPH_TARGET1_POSITION, attributes, model);
 	}
 	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET0_NORMAL))
 	{
 		int accessorIndex = primitive.targets[0].find("NORMAL")->second;
 		const tinygltf::Accessor& accessor = model.accessors[accessorIndex];
-		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, GetAttributeByteOffset(attributes, VertexAttribute::MORPH_TARGET0_NORMAL), model);
+		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, VertexAttribute::MORPH_TARGET0_NORMAL, attributes, model);
 	}
 	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET1_NORMAL))
 	{
 		int accessorIndex = primitive.targets[1].find("NORMAL")->second;
 		const tinygltf::Accessor& accessor = model.accessors[accessorIndex];
-		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, GetAttributeByteOffset(attributes, VertexAttribute::MORPH_TARGET1_NORMAL), model);
+		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, VertexAttribute::MORPH_TARGET1_NORMAL, attributes, model);
 	}
 
 	return buffer;
@@ -272,27 +316,27 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 
 	// Don't change attribute indices, shaders rely on them being in this order
 
+	// Position
 	int offset = 0;
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-	offset += 12;
+	offset += attributeByteSizes.find(VertexAttribute::POSITION)->second;
 
 	if (HasFlag(flags, VertexAttribute::NORMAL))
 	{
 		glEnableVertexAttribArray(1);
 		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += 12;
+		offset += attributeByteSizes.find(VertexAttribute::NORMAL)->second;
 	}
 	if (HasFlag(flags, VertexAttribute::WEIGHTS))
 	{
 		glEnableVertexAttribArray(2);
 		glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += 16;
+		offset += attributeByteSizes.find(VertexAttribute::WEIGHTS)->second;
 
-		// TODO: update when joints changed to more compact representation
 		glEnableVertexAttribArray(3);
-		glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += 16;
+		glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, vertexSizeBytes, (const void*)offset);
+		offset += attributeByteSizes.find(VertexAttribute::JOINTS)->second;
 
 	}
 	if (HasFlag(flags, VertexAttribute::MORPH_TARGET0_POSITION))
@@ -300,20 +344,21 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 		assert(HasFlag(flags, VertexAttribute::MORPH_TARGET1_POSITION));
 		glEnableVertexAttribArray(4);
 		glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += 12;
+		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_POSITION)->second;
+
 		glEnableVertexAttribArray(5);
 		glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += 12;
+		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_POSITION)->second;
 	}
 	if (HasFlag(flags, VertexAttribute::MORPH_TARGET0_NORMAL))
 	{
 		assert(HasFlag(flags, VertexAttribute::MORPH_TARGET1_NORMAL));
 		glEnableVertexAttribArray(6);
 		glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += 12;
+		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_NORMAL)->second;
 		glEnableVertexAttribArray(7);
 		glVertexAttribPointer(7, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += 12;
+		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_NORMAL)->second;
 	}
 	
 	if (hasIndexBuffer)

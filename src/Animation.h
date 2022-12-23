@@ -2,10 +2,12 @@
 
 #include "Entity.h"
 #include "GLTFHelpers.h"
+#include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <tiny_gltf/tiny_gltf.h>
 #include <span>
+#include "Skeleton.h"
 #include <vector>
 
 struct Animation
@@ -26,6 +28,8 @@ struct Animation
 double GetAnimationDurationSeconds(const tinygltf::Animation& animation, const tinygltf::Model& model);
 std::vector<float> GetFixedRateWeightValues(const tinygltf::Accessor& keyframeTimesAccessor, const tinygltf::Accessor& keyframeValuesAccessor, const tinygltf::Model& model, int framesPerSecond, float parentAnimationDuration, int numMorphTargets = 2);
 std::vector<float> SampleWeightsAt(float time, std::span<float> keyframeTimes, std::span<float> weights, int numMorphTargets = 2);
+std::vector<glm::mat4> ComputeGlobalMatrices(const Skeleton& skeleton, const std::vector<Entity>& entites);
+std::vector<glm::mat4> ComputeSkinningMatrices(const Skeleton& skeleton, const std::vector<Entity>& entities);
 
 // Use for translation, scale, or rotation. For translation or scale, lerp is used. For rotation (quaternions),
 // slerp is used. If time lies outside the time span, the nearest keyframe's value is returned and no interpolation is used
