@@ -19,7 +19,6 @@ public:
 	float time = 0.0f; // TODO: remove
 private:
 	void RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection);
-	void SetEntityParents(Entity& entity, int entityIndex, int parent);
 	std::vector<Animation> animations;
 	std::vector<Entity> entities;
 	std::vector<Skeleton> skeletons;

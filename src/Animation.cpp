@@ -17,79 +17,52 @@ double GetAnimationDurationSeconds(const tinygltf::Animation& animation, const t
 	return animationDuration;
 }
 
-std::vector<float> GetFixedRateWeightValues(const tinygltf::Accessor& keyframeTimesAccessor, const tinygltf::Accessor& keyframeValuesAccessor, const tinygltf::Model& model, int framesPerSecond, float parentAnimationDuration, int numMorphTargets)
+std::vector<float> SampleWeightsAt(const PropertyAnimation<float>& animation, float normalizedTime, int numMorphTargets)
 {
-	const float childAnimationDuration = keyframeTimesAccessor.maxValues[0];
-	assert(childAnimationDuration <= parentAnimationDuration);
+	assert(animation.method == InterpolationType::LINEAR); // for now, too lazy
 
-	const float secondsPerFrame = 1.0f / framesPerSecond;
-
-	auto keyframeTimesData = GetAccessorBytes(keyframeTimesAccessor, model);
-	std::span<float> keyframeTimes((float*)keyframeTimesData.data(), keyframeTimesAccessor.count);
-
-	auto keyframeValuesData = GetAccessorBytes(keyframeValuesAccessor, model);
-	std::span<float> keyframeValues((float*)keyframeValuesData.data(), keyframeValuesAccessor.count);
-
-	const int numFixedRateFrames = std::ceil(parentAnimationDuration * framesPerSecond);
-	const int numFixedRateKeyframes = numFixedRateFrames + 1;
-	const int numWeights = numFixedRateKeyframes * numMorphTargets;
-
-	std::vector<float> fixedFramerateWeights;
-	float time = 0.0f;
-
-	for (int frame = 0; frame < numFixedRateKeyframes; frame++, time += secondsPerFrame)
-	{
-		std::vector<float> weights = SampleWeightsAt(time, keyframeTimes, keyframeValues, numMorphTargets);
-		fixedFramerateWeights.insert(fixedFramerateWeights.end(), weights.begin(), weights.end());
-	}
-
-	return fixedFramerateWeights;
-}
-
-std::vector<float> SampleWeightsAt(float time, std::span<float> keyframeTimes, std::span<float> weights, int numMorphTargets)
-{
 	std::vector<float> samples(numMorphTargets);
 
-	if (time <= keyframeTimes.front())
+	if (normalizedTime <= animation.times.front())
 	{
 		for (int i = 0; i < numMorphTargets; i++)
 		{
-			samples[i] = weights[i];
+			samples[i] = animation.values[i];
 		}
 		return samples;
 	}
-	else if (time >= keyframeTimes.back())
+	else if (normalizedTime >= animation.times.back())
 	{
 		for (int i = 0; i < numMorphTargets; i++)
 		{
-			samples[i] = weights[weights.size() - numMorphTargets + i];
+			samples[i] = animation.values[animation.values.size() - numMorphTargets + i];
 		}
 		return samples;
 	}
 
-	int firstGreaterThanIndex = 0;
+	int nextKeyframeTimeIndex = 0;
 
-	while (keyframeTimes[firstGreaterThanIndex] <= time)
+	while (animation.times[nextKeyframeTimeIndex] <= normalizedTime)
 	{
-		firstGreaterThanIndex++;
+		nextKeyframeTimeIndex++;
 	}
 
-	float timeA = keyframeTimes[firstGreaterThanIndex - 1];
-	float timeB = keyframeTimes[firstGreaterThanIndex];
-	float t = (time - timeA) / (timeB - timeA);
+	float previousKeyframeTime = animation.times[nextKeyframeTimeIndex - 1];
+	float nextKeyframeTime = animation.times[nextKeyframeTimeIndex];
+	float t = (normalizedTime - previousKeyframeTime) / (nextKeyframeTime - previousKeyframeTime);
 
-	int indexA = firstGreaterThanIndex - 1;
+	int indexA = nextKeyframeTimeIndex - 1;
 	std::vector<float> weightsA(numMorphTargets);
 	for (int i = 0; i < numMorphTargets; i++)
 	{
-		weightsA[i] = weights[numMorphTargets * indexA + i];
+		weightsA[i] = animation.values[numMorphTargets * indexA + i];
 	}
 
-	int indexB = firstGreaterThanIndex;
+	int indexB = nextKeyframeTimeIndex;
 	std::vector<float> weightsB(numMorphTargets);
 	for (int i = 0; i < numMorphTargets; i++)
 	{
-		weightsB[i] = weights[numMorphTargets * indexB + i];
+		weightsB[i] = animation.values[numMorphTargets * indexB + i];
 	}
 
 	for (int i = 0; i < numMorphTargets; i++)

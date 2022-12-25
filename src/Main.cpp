@@ -52,7 +52,7 @@ void ProcessInput(GLFWwindow* window, Camera& camera, float dt)
 
 int main(int argc, char** argv)
 {
-    std::string filename = "SimpleSkin";
+    std::string filename = "ABeautifulGame";
     std::string filepath = "C:\\dev\\gltf-models\\" + filename + "\\glTF\\" + filename + ".gltf";
 
     bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, filepath);

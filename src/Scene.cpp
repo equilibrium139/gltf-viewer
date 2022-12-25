@@ -89,22 +89,21 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, GLTFRes
 	{
 		animations.emplace_back();
 		Animation& animation = animations.back();
-			
-		// TODO: set animation duration to multiple of (1.0 / framesPerSecond), AKA secondsPerFrame
-		double animationDurationSeconds = GetAnimationDurationSeconds(gltfAnimation, model);
-		animation.durationSeconds = (float)animationDurationSeconds; 
 
+		double animationDurationSeconds = GetAnimationDurationSeconds(gltfAnimation, model);
+		animation.durationSeconds = (float)animationDurationSeconds;
+			
 		for (const auto& channel : gltfAnimation.channels)
 		{
 			Entity* sceneEntity = &entities[channel.target_node];
 			
 			// Entity might already have another animated channel in this animation, check if so
 			auto entityAnimationIter = std::find_if(animation.entityAnimations.begin(), animation.entityAnimations.end(),
-				[sceneEntity](const Animation::EntityAnimation& entityAnimation)
+				[sceneEntity](const EntityAnimation& entityAnimation)
 				{
 					return entityAnimation.entity == sceneEntity;
 				});
-			Animation::EntityAnimation* entityAnimation;
+			EntityAnimation* entityAnimation;
 			if (entityAnimationIter != animation.entityAnimations.end())
 			{
 				entityAnimation = &(*entityAnimationIter);
@@ -118,24 +117,59 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, GLTFRes
 			entityAnimation->entity = sceneEntity;
 
 			const auto& sampler = gltfAnimation.samplers[channel.sampler];
-			assert(sampler.interpolation == "LINEAR" && "Only linear interpolation supported for now.");
+			InterpolationType method = InterpolationType::LINEAR;
+			if (sampler.interpolation == "STEP") method = InterpolationType::STEP;
+			else if (sampler.interpolation == "CUBICSPLINE") method = InterpolationType::CUBICSPLINE;
+			assert(channel.target_path != "weights" || method == InterpolationType::LINEAR && "Non-linear interpolation not supported for weights currently");
 			const auto& keyframeTimesAccessor = model.accessors[sampler.input];
 			const auto& keyframeValuesAccessor = model.accessors[sampler.output];
 			if (channel.target_path == "translation")
 			{
-				entityAnimation->translations = GetFixedRateTRSValues<glm::vec3>(keyframeTimesAccessor, keyframeValuesAccessor, model, animation.framesPerSecond, animationDurationSeconds);
+				auto translationsBytes = GetAccessorBytes(keyframeValuesAccessor, model);
+				std::span<glm::vec3> translations((glm::vec3*)translationsBytes.data(), keyframeValuesAccessor.count);
+
+				auto timesBytes = GetAccessorBytes(keyframeTimesAccessor, model);
+				std::span<float> times((float*)timesBytes.data(), keyframeTimesAccessor.count);
+
+				entityAnimation->translations.values.assign(translations.begin(), translations.end());
+				entityAnimation->translations.times.assign(times.begin(), times.end());
+				entityAnimation->translations.method = method;
 			}
 			else if (channel.target_path == "scale")
 			{
-				entityAnimation->scales = GetFixedRateTRSValues<glm::vec3>(keyframeTimesAccessor, keyframeValuesAccessor, model, animation.framesPerSecond, animationDurationSeconds);
+				auto scalesBytes = GetAccessorBytes(keyframeValuesAccessor, model);
+				std::span<glm::vec3> scales((glm::vec3*)scalesBytes.data(), keyframeValuesAccessor.count);
+
+				auto timesBytes = GetAccessorBytes(keyframeTimesAccessor, model);
+				std::span<float> times((float*)timesBytes.data(), keyframeTimesAccessor.count);
+
+				entityAnimation->scales.values.assign(scales.begin(), scales.end());
+				entityAnimation->scales.times.assign(times.begin(), times.end());
+				entityAnimation->scales.method = method;
 			}
 			else if (channel.target_path == "rotation")
 			{
-				entityAnimation->rotations = GetFixedRateTRSValues<glm::quat>(keyframeTimesAccessor, keyframeValuesAccessor, model, animation.framesPerSecond, animationDurationSeconds);
+				auto rotationsBytes = GetAccessorBytes(keyframeValuesAccessor, model);
+				std::span<glm::quat> rotations((glm::quat*)rotationsBytes.data(), keyframeValuesAccessor.count);
+
+				auto timesBytes = GetAccessorBytes(keyframeTimesAccessor, model);
+				std::span<float> times((float*)timesBytes.data(), keyframeTimesAccessor.count);
+
+				entityAnimation->rotations.values.assign(rotations.begin(), rotations.end());
+				entityAnimation->rotations.times.assign(times.begin(), times.end());
+				entityAnimation->rotations.method = method;
 			}
 			else
 			{
-				entityAnimation->weights = GetFixedRateWeightValues(keyframeTimesAccessor, keyframeValuesAccessor, model, animation.framesPerSecond, animationDurationSeconds);
+				auto weightsBytes = GetAccessorBytes(keyframeValuesAccessor, model);
+				std::span<float> weights((float*)weightsBytes.data(), keyframeValuesAccessor.count);
+
+				auto timesBytes = GetAccessorBytes(keyframeTimesAccessor, model);
+				std::span<float> times((float*)timesBytes.data(), keyframeTimesAccessor.count);
+
+				entityAnimation->weights.values.assign(weights.begin(), weights.end());
+				entityAnimation->weights.times.assign(times.begin(), times.end());
+				entityAnimation->weights.method = method;
 			}
 		}
 	}
@@ -155,52 +189,18 @@ void Scene::Update(float dt)
 {
 	time += dt;
 	
-	if (animations.size() == 0) return;
-
-	const auto& anim = animations[0];
-	float animTime = std::fmod(time, anim.durationSeconds);
-	float keyframe = animTime * anim.framesPerSecond;
-	float a = std::floor(keyframe);
-	float t = keyframe - a;
-	assert(t >= 0.0f && t <= 1.0f);
-
-	int aIndex = (int)a;
-	int bIndex = aIndex + 1;
-
-	for (const auto& entityAnim : anim.entityAnimations)
+	for (const auto& anim : animations)
 	{
-		Entity* entity = entityAnim.entity;
-		
-		if (entityAnim.rotations.size() > 0)
-		{
-			const auto& a = entityAnim.rotations[aIndex];
-			const auto& b = entityAnim.rotations[bIndex];
-			entity->transform.rotation = glm::slerp(a, b, t);
-		}
+		float normalizedTime = std::fmod(time, anim.durationSeconds);
 
-		if (entityAnim.translations.size() > 0)
+		for (const auto& entityAnim : anim.entityAnimations)
 		{
-			const auto& a = entityAnim.translations[aIndex];
-			const auto& b = entityAnim.translations[bIndex];
-			entity->transform.translation = t * a + (1.0f - t) * b;
-		}
+			Entity* entity = entityAnim.entity;
 
-		if (entityAnim.scales.size() > 0)
-		{
-			const auto& a = entityAnim.scales[aIndex];
-			const auto& b = entityAnim.scales[bIndex];
-			entity->transform.scale = t * a + (1.0f - t) * b;
-		}
-
-		if (entityAnim.weights.size() > 0)
-		{
-			const int numMorphTargets = entity->morphTargetWeights.size();
-			for (int i = 0; i < numMorphTargets; i++)
-			{
-				float a = entityAnim.weights[aIndex * numMorphTargets + i];
-				float b = entityAnim.weights[bIndex * numMorphTargets + i];
-				entity->morphTargetWeights[i] = t * a + (1.0f - t) * b;
-			}
+			if (entityAnim.translations.values.size() > 0) entity->transform.translation = SampleAt(entityAnim.translations, normalizedTime);
+			if (entityAnim.scales.values.size() > 0) entity->transform.scale = SampleAt(entityAnim.scales, normalizedTime);
+			if (entityAnim.rotations.values.size() > 0) entity->transform.rotation = SampleAt(entityAnim.rotations, normalizedTime);
+			if (entityAnim.weights.values.size() > 0) entity->morphTargetWeights = SampleWeightsAt(entityAnim.weights, normalizedTime);
 		}
 	}
 }
