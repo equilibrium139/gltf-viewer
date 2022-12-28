@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include "GLTFHelpers.h"
+#include "imgui.h"
 
 Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 	:resources(model)
@@ -213,6 +214,8 @@ void Scene::UpdateAndRender(const Input& input)
 		}
 	}
 
+	RenderUI();
+
 	const float aspectRatio = (float)input.windowWidth / (float)input.windowHeight;
 	Render(aspectRatio);
 }
@@ -271,4 +274,35 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 	{
 		RenderEntity(entities[childIndex], globalTransform, view, projection);
 	}
+}
+
+void Scene::RenderUI()
+{
+	ImGui::Begin("Scene");
+
+	for (int i = 0; i < entities.size(); i++)
+	{
+		if (entities[i].parent < 0)
+		{
+			RenderSceneHierarchy(entities[i]);
+		}
+	}
+
+	ImGui::End();
+}
+
+void Scene::RenderSceneHierarchy(const Entity& entity)
+{
+	if (ImGui::TreeNode(entity.name.c_str()))
+	{
+		for (int childIndex : entity.children)
+		{
+			const Entity& child = entities[childIndex];
+
+			RenderSceneHierarchy(child);
+		}
+
+		ImGui::TreePop();
+	}
+
 }

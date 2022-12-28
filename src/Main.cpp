@@ -11,8 +11,8 @@
 #include <iostream>
 #include "Scene.h"
 
-int windowWidth = 800;
-int windowHeight = 600;
+int windowWidth = 1920;
+int windowHeight = 1080;
 
 void FramebufferSizeCallback(GLFWwindow*, int width, int height)
 {
@@ -79,6 +79,35 @@ void ProcessInput(GLFWwindow* window, Input& outInput, const ImGuiIO& io)
     }
 }
 
+Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, Scene>& scenes)
+{
+    std::string filepath = "C:\\dev\\gltf-models\\" + modelName + "\\glTF\\" + modelName + ".gltf";
+    tinygltf::Model model;
+    tinygltf::TinyGLTF loader;
+    std::string err;
+    std::string warn;
+
+    bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, filepath);
+    //bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, argv[1]); // for binary glTF(.glb)
+
+    if (!warn.empty()) {
+        printf("Warn: %s\n", warn.c_str());
+    }
+
+    if (!err.empty()) {
+        printf("Err: %s\n", err.c_str());
+    }
+
+    if (!ret) {
+        printf("Failed to parse glTF\n");
+        return nullptr;
+    }
+
+    assert(model.scenes.size() == 1);
+    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model));
+    return &pair.first->second;
+}
+
 int main(int argc, char** argv)
 {
     if (!glfwInit())
@@ -111,7 +140,7 @@ int main(int argc, char** argv)
 
     glEnable(GL_DEPTH_TEST);
 
-    std::unordered_map<std::string, std::unique_ptr<Scene>> sampleModels;
+    std::unordered_map<std::string, Scene> sampleModels;
     std::vector<std::string> sampleModelNames;
 
     namespace fs = std::filesystem;
@@ -144,8 +173,8 @@ int main(int argc, char** argv)
     float previousFrameTime = 0.0f;
     float currentFrameTime = 0.0f;
 
-    int selectedModelIndex = 0;
-    Scene* selectedScene = nullptr;
+    int selectedModelIndex = 1;
+    Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels);
 
     while (!glfwWindowShouldClose(window))
     {
@@ -175,35 +204,11 @@ int main(int argc, char** argv)
                     auto sceneIter = sampleModels.find(sampleModelNames[selectedModelIndex]);
                     if (sceneIter != sampleModels.end())
                     {
-                        selectedScene = sceneIter->second.get();
+                        selectedScene = &sceneIter->second;
                     }
                     else
                     {
-                        std::string filepath = "C:\\dev\\gltf-models\\" + sampleModelNames[selectedModelIndex] + "\\glTF\\" + sampleModelNames[selectedModelIndex] + ".gltf";
-                        tinygltf::Model model;
-                        tinygltf::TinyGLTF loader;
-                        std::string err;
-                        std::string warn;
-
-                        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, filepath);
-                        //bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, argv[1]); // for binary glTF(.glb)
-
-                        if (!warn.empty()) {
-                            printf("Warn: %s\n", warn.c_str());
-                        }
-
-                        if (!err.empty()) {
-                            printf("Err: %s\n", err.c_str());
-                        }
-
-                        if (!ret) {
-                            printf("Failed to parse glTF\n");
-                            return -1;
-                        }
-
-                        assert(model.scenes.size() == 1);
-                        sampleModels[sampleModelNames[selectedModelIndex]] = std::make_unique<Scene>(model.scenes[0], model);
-                        selectedScene = sampleModels[sampleModelNames[selectedModelIndex]].get();
+                        selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels);
                     }
                 }
 

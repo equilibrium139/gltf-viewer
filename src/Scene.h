@@ -20,6 +20,8 @@ public:
 private:
 	void Render(float aspectRatio);
 	void RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection);
+	void RenderUI();
+	void RenderSceneHierarchy(const Entity& entity);
 	std::vector<Animation> animations;
 	std::vector<Entity> entities;
 	std::vector<Skeleton> skeletons;
