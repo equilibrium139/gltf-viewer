@@ -3,10 +3,12 @@
 #include <algorithm>
 #include "GLTFHelpers.h"
 
-Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, GLTFResources* resources)
-	:resources(resources)
+Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
+	:resources(model)
 {
 	assert(model.scenes.size() == 1); // for now
+
+	camera.position.z = 5.0f;
 
 	// Nodes
 	for (const auto& node : model.nodes)
@@ -20,7 +22,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, GLTFRes
 		// TODO: add support for cameras
 		if (node.mesh >= 0)
 		{
-			entity.mesh = &resources->meshes[node.mesh];
+			entity.mesh = &resources.meshes[node.mesh];
 			// TODO: add support for more than 2 morph targets
 			bool hasMorphTargets = HasFlag(entity.mesh->flags, VertexAttribute::MORPH_TARGET0_POSITION);
 			if (hasMorphTargets)
@@ -185,9 +187,16 @@ void Scene::Render(float aspectRatio)
 	}
 }
 
-void Scene::Update(float dt)
+void Scene::UpdateAndRender(const Input& input)
 {
-	time += dt;
+	if (input.wPressed) camera.ProcessKeyboard(CAM_FORWARD, input.deltaTime);
+	if (input.aPressed) camera.ProcessKeyboard(CAM_LEFT, input.deltaTime);
+	if (input.sPressed) camera.ProcessKeyboard(CAM_BACKWARD, input.deltaTime);
+	if (input.dPressed) camera.ProcessKeyboard(CAM_RIGHT, input.deltaTime);
+
+	if (input.leftMousePressed) camera.ProcessMouseMovement(input.mouseDeltaX, input.mouseDeltaY);
+
+	time += input.deltaTime;
 	
 	for (const auto& anim : animations)
 	{
@@ -203,6 +212,9 @@ void Scene::Update(float dt)
 			if (entityAnim.weights.values.size() > 0) entity->morphTargetWeights = SampleWeightsAt(entityAnim.weights, normalizedTime);
 		}
 	}
+
+	const float aspectRatio = (float)input.windowWidth / (float)input.windowHeight;
+	Render(aspectRatio);
 }
 
 void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection)
@@ -213,7 +225,7 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 	if (entity.mesh != nullptr)
 	{
 		glBindVertexArray(entity.mesh->VAO);
-		Shader& shader = resources->GetMeshShader(*entity.mesh); 
+		Shader& shader = resources.GetMeshShader(*entity.mesh); 
 		shader.use();
 		shader.SetMat4("modelView", glm::value_ptr(modelView));
 		shader.SetMat4("projection", glm::value_ptr(projection));

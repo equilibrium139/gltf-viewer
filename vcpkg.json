@@ -3,6 +3,10 @@
     "version": "0.1.0",
     "dependencies": [
         "glfw3",
-        "glm"
+        "glm",
+        {
+          "name": "imgui",
+          "features": ["glfw-binding", "opengl3-binding"]
+        }
     ]
 }

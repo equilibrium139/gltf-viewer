@@ -1,13 +1,15 @@
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
+#include "Input.h"
+#include <memory>
 #include "tiny_gltf/tiny_gltf.h"
+#include <unordered_map>
+#include <filesystem>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include "Scene.h"
-
-tinygltf::Model model;
-tinygltf::TinyGLTF loader;
-std::string err;
-std::string warn;
 
 int windowWidth = 800;
 int windowHeight = 600;
@@ -19,60 +21,66 @@ void FramebufferSizeCallback(GLFWwindow*, int width, int height)
     windowHeight = height;
 }
 
-void ProcessInput(GLFWwindow* window, Camera& camera, float dt)
+void ProcessInput(GLFWwindow* window, Input& outInput, const ImGuiIO& io)
 {
-    static bool first_poll = true;
-    static double prevMouseX, prevMouseY;
+    static bool firstPoll = true;
 
-    if (first_poll)
+    auto prevMouseX = outInput.mouseX;
+    auto prevMouseY = outInput.mouseY;
+    double currentMouseX, currentMouseY;
+    glfwGetCursorPos(window, &currentMouseX, &currentMouseY);
+    outInput.mouseX = (float)currentMouseX;
+    outInput.mouseY = (float)currentMouseY;
+
+    glfwGetWindowSize(window, &outInput.windowWidth, &outInput.windowHeight);
+
+    if (firstPoll)
     {
-        glfwGetCursorPos(window, &prevMouseX, &prevMouseY);
-        first_poll = false;
+        outInput.mouseDeltaX = 0.0;
+        outInput.mouseDeltaY = 0.0;
+        firstPoll = false;
+    }
+    else
+    {
+        if (!io.WantCaptureMouse)
+        {
+            outInput.mouseDeltaX = outInput.mouseX - prevMouseX;
+            outInput.mouseDeltaY = prevMouseY - outInput.mouseY;
+        }
+        else
+        {
+            outInput.mouseDeltaX = 0.0;
+            outInput.mouseDeltaY = 0.0;
+        }
     }
 
-    double mouseX, mouseY;
-    glfwGetCursorPos(window, &mouseX, &mouseY);
-
-    double mouseDeltaX = mouseX - prevMouseX;
-    double mouseDeltaY = -(mouseY - prevMouseY);
-
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
+    if (!io.WantCaptureMouse)
     {
-        camera.ProcessMouseMovement((float)mouseDeltaX, (float)mouseDeltaY);
+        outInput.leftMousePressed = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+    }
+    else
+    {
+        outInput.leftMousePressed = false;
     }
 
-    prevMouseX = mouseX;
-    prevMouseY = mouseY;
-
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) camera.ProcessKeyboard(CAM_FORWARD, dt);
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) camera.ProcessKeyboard(CAM_LEFT, dt);
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) camera.ProcessKeyboard(CAM_BACKWARD, dt);
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) camera.ProcessKeyboard(CAM_RIGHT, dt);
+    if (!io.WantCaptureKeyboard)
+    {
+        outInput.wPressed = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
+        outInput.sPressed = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
+        outInput.aPressed = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
+        outInput.dPressed = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
+    }
+    else
+    {
+        outInput.wPressed = false;
+        outInput.sPressed = false;
+        outInput.aPressed = false;
+        outInput.dPressed = false;
+    }
 }
 
 int main(int argc, char** argv)
 {
-    std::string filename = "ABeautifulGame";
-    std::string filepath = "C:\\dev\\gltf-models\\" + filename + "\\glTF\\" + filename + ".gltf";
-
-    bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, filepath);
-    //bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, argv[1]); // for binary glTF(.glb)
-
-    if (!warn.empty()) {
-        printf("Warn: %s\n", warn.c_str());
-    }
-
-    if (!err.empty()) {
-        printf("Err: %s\n", err.c_str());
-    }
-
-    if (!ret) {
-        printf("Failed to parse glTF\n");
-        return -1;
-    }
-
-    assert(model.scenes.size() == 1);
-
     if (!glfwInit())
         return -1;
 
@@ -82,7 +90,7 @@ int main(int argc, char** argv)
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     //tinygltf::Scene& scene = model.scenes[model.defaultScene];
-	GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, model.scenes[0].name.c_str(), NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(windowWidth, windowHeight, "glTF Viewer", NULL, NULL);
 
     if (!window)
     {
@@ -103,34 +111,137 @@ int main(int argc, char** argv)
 
     glEnable(GL_DEPTH_TEST);
 
-    float deltaTime = 0.0f;
+    std::unordered_map<std::string, std::unique_ptr<Scene>> sampleModels;
+    std::vector<std::string> sampleModelNames;
+
+    namespace fs = std::filesystem;
+
+    const auto modelsDirectory = fs::path("C:/dev/gltf-models");
+    assert(fs::is_directory(modelsDirectory));
+    for (const auto& entry : fs::directory_iterator(modelsDirectory))
+    {
+        if (entry.is_directory())
+        {
+            sampleModelNames.emplace_back(entry.path().filename().string());
+        }
+    }
+
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO();
+
+    ImGui::StyleColorsDark();
+
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init(glsl_version);
+
+    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+    Input input{};
+
+    input.deltaTime = 0.0f;
     float previousFrameTime = 0.0f;
     float currentFrameTime = 0.0f;
 
-    GLTFResources resources(model);
-    Scene scene(model.scenes[0], model, &resources);
-    scene.camera.position.z = 5.0f;
+    int selectedModelIndex = 0;
+    Scene* selectedScene = nullptr;
 
     while (!glfwWindowShouldClose(window))
     {
         // Update
         currentFrameTime = (float)glfwGetTime();
-        deltaTime = currentFrameTime - previousFrameTime;
+        input.deltaTime = currentFrameTime - previousFrameTime;
         previousFrameTime = currentFrameTime;
 
-        ProcessInput(window, scene.camera, deltaTime);
+        ProcessInput(window, input, io);
 
-        scene.Update(deltaTime);
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
 
-        // Render
+        ImGui::Begin("Model Select");
+
+        const int num_models = (int)sampleModelNames.size();
+        auto& model_combo_preview_value = sampleModelNames[selectedModelIndex];
+        if (ImGui::BeginCombo("Model", model_combo_preview_value.c_str()))
+        {
+            for (int n = 0; n < num_models; n++)
+            {
+                const bool is_selected = (selectedModelIndex == n);
+                if (ImGui::Selectable(sampleModelNames[n].c_str(), is_selected))
+                {
+                    selectedModelIndex = n;
+                    auto sceneIter = sampleModels.find(sampleModelNames[selectedModelIndex]);
+                    if (sceneIter != sampleModels.end())
+                    {
+                        selectedScene = sceneIter->second.get();
+                    }
+                    else
+                    {
+                        std::string filepath = "C:\\dev\\gltf-models\\" + sampleModelNames[selectedModelIndex] + "\\glTF\\" + sampleModelNames[selectedModelIndex] + ".gltf";
+                        tinygltf::Model model;
+                        tinygltf::TinyGLTF loader;
+                        std::string err;
+                        std::string warn;
+
+                        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, filepath);
+                        //bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, argv[1]); // for binary glTF(.glb)
+
+                        if (!warn.empty()) {
+                            printf("Warn: %s\n", warn.c_str());
+                        }
+
+                        if (!err.empty()) {
+                            printf("Err: %s\n", err.c_str());
+                        }
+
+                        if (!ret) {
+                            printf("Failed to parse glTF\n");
+                            return -1;
+                        }
+
+                        assert(model.scenes.size() == 1);
+                        sampleModels[sampleModelNames[selectedModelIndex]] = std::make_unique<Scene>(model.scenes[0], model);
+                        selectedScene = sampleModels[sampleModelNames[selectedModelIndex]].get();
+                    }
+                }
+
+                // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+                if (is_selected)
+                {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+        ImGui::End();
+
+        // Rendering
+        int display_w, display_h;
+        glfwGetFramebufferSize(window, &display_w, &display_h);
+        glViewport(0, 0, display_w, display_h);
+        glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        scene.Render((float)windowWidth / (float)windowHeight);
+        if (selectedScene)
+        {
+            selectedScene->UpdateAndRender(input);
+        }
+
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
 
         glfwPollEvents();
     }
 
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+
+    glfwDestroyWindow(window);
     glfwTerminate();
 }

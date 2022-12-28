@@ -16,6 +16,7 @@ src/GLTFHelpers.h
 src/GLTFHelpers.cpp
 src/GLTFResources.cpp
 src/GLTFResources.h
+src/Input.h
 src/Mesh.cpp
 src/Mesh.h
 src/Scene.h
@@ -32,6 +33,7 @@ src/tiny_gltf.cpp
 
 find_package(glfw3 CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
+find_package(imgui CONFIG REQUIRED)
 
 target_include_directories(gltf-viewer PRIVATE include)
-target_link_libraries(gltf-viewer PRIVATE glfw glm::glm)
+target_link_libraries(gltf-viewer PRIVATE glfw glm::glm imgui::imgui)
