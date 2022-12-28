@@ -19,6 +19,7 @@ src/GLTFResources.h
 src/Input.h
 src/Mesh.cpp
 src/Mesh.h
+src/PBRMaterial.h
 src/Scene.h
 src/Scene.cpp
 src/Shader.cpp

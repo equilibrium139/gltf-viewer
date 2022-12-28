@@ -3,6 +3,7 @@
 #include "Mesh.h"
 #include "Shader.h"
 #include "Skeleton.h"
+#include "Texture.h"
 #include "tiny_gltf/tiny_gltf.h"
 #include "VertexAttribute.h"
 #include <vector>
@@ -13,6 +14,7 @@ struct GLTFResources
 	GLTFResources(const tinygltf::Model& model);
 	std::vector<Mesh> meshes;
 	std::unordered_map<VertexAttribute, Shader> shaders;
+	std::vector<Texture> textures;
 
 	Shader& GetMeshShader(const Mesh& mesh);
 };

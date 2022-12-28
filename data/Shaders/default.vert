@@ -1,20 +1,24 @@
 layout(location = 0) in vec3 aBasePos;
 
+#ifdef HAS_TEXCOORD
+layout(location = 1) in vec3 aTexcoords;
+#endif // HAS_TEXCOORD
+
 #ifdef HAS_NORMALS
-layout(location = 1) in vec3 aBaseNormal;
+layout(location = 2) in vec3 aBaseNormal;
 #endif // HAS_NORMALS
 
 #ifdef HAS_JOINTS
-layout(location = 2) in vec4 aWeights;
-layout(location = 3) in uint aJoints;
+layout(location = 3) in vec4 aWeights;
+layout(location = 4) in uint aJoints;
 #endif // HAS_JOINTS
 
 #ifdef HAS_MORPH_TARGETS
-layout(location = 4) in vec3 aMorphBasePosDifference1;
-layout(location = 5) in vec3 aMorphBasePosDifference2;
+layout(location = 5) in vec3 aMorphBasePosDifference1;
+layout(location = 6) in vec3 aMorphBasePosDifference2;
     #ifdef HAS_NORMALS
-    layout(location = 6) in vec3 aMorphBaseNormalDifference1;
-    layout(location = 7) in vec3 aMorphBaseNormalDifference2;
+    layout(location = 7) in vec3 aMorphBaseNormalDifference1;
+    layout(location = 8) in vec3 aMorphBaseNormalDifference2;
     #endif // HAS_NORMALS
 #endif // HAS_MORPH_TARGETS
 

@@ -5,6 +5,12 @@
 #include <tiny_gltf/tiny_gltf.h>
 #include "VertexAttribute.h"
 
+struct Submesh
+{
+	int start, countVerticesOrIndices;
+	// TODO: add material
+};
+
 struct Mesh
 {
 	Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model);

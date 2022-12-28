@@ -3,16 +3,18 @@
 #include <cstdint>
 #include <type_traits>
 
+// TODO: support multiple tex coords?
 enum class VertexAttribute : std::uint32_t
 {
     POSITION = 1 << 0,
-    NORMAL = 1 << 1,
-    WEIGHTS = 1 << 2,
-    JOINTS = 1 << 3,
-    MORPH_TARGET0_POSITION = 1 << 4,
-    MORPH_TARGET1_POSITION = 1 << 5,
-    MORPH_TARGET0_NORMAL = 1 << 6,
-    MORPH_TARGET1_NORMAL = 1 << 7,
+    TEXCOORD = 1 << 1,
+    NORMAL = 1 << 2,
+    WEIGHTS = 1 << 3,
+    JOINTS = 1 << 4,
+    MORPH_TARGET0_POSITION = 1 << 5,
+    MORPH_TARGET1_POSITION = 1 << 6,
+    MORPH_TARGET0_NORMAL = 1 << 7,
+    MORPH_TARGET1_NORMAL = 1 << 8,
 };
 
 inline VertexAttribute operator | (VertexAttribute lhs, VertexAttribute rhs)

@@ -8,9 +8,11 @@
 #include <vector>
 #include <span>
 
+// Used for glTF attribute names
 static const std::unordered_map<std::string, VertexAttribute> vertexAttributeMapping =
 {
 	{"POSITION", VertexAttribute::POSITION},
+	{"TEXCOORD_0",  VertexAttribute::TEXCOORD},
 	{"NORMAL", VertexAttribute::NORMAL},
 	{"JOINTS_0", VertexAttribute::WEIGHTS},
 	{"WEIGHTS_0", VertexAttribute::JOINTS}
@@ -18,6 +20,7 @@ static const std::unordered_map<std::string, VertexAttribute> vertexAttributeMap
 static const std::vector<VertexAttribute> vertexAttributeOrdering =
 {
 	VertexAttribute::POSITION,
+	VertexAttribute::TEXCOORD,
 	VertexAttribute::NORMAL,
 	VertexAttribute::WEIGHTS,
 	VertexAttribute::JOINTS,
@@ -29,6 +32,7 @@ static const std::vector<VertexAttribute> vertexAttributeOrdering =
 static const std::unordered_map<VertexAttribute, int> attributeByteSizes =
 {
 	{VertexAttribute::POSITION, 12},
+	{VertexAttribute::TEXCOORD, 8},
 	{VertexAttribute::NORMAL, 12},
 	{VertexAttribute::WEIGHTS, 16},
 	{VertexAttribute::JOINTS, 4},
@@ -95,14 +99,13 @@ static int GetVertexSizeBytes(VertexAttribute attributes)
 {
 	int size = 0;
 
-	if (HasFlag(attributes, VertexAttribute::POSITION)) size += attributeByteSizes.find(VertexAttribute::POSITION)->second;
-	if (HasFlag(attributes, VertexAttribute::NORMAL)) size += attributeByteSizes.find(VertexAttribute::NORMAL)->second;
-	if (HasFlag(attributes, VertexAttribute::WEIGHTS)) size += attributeByteSizes.find(VertexAttribute::WEIGHTS)->second;
-	if (HasFlag(attributes, VertexAttribute::JOINTS)) size += attributeByteSizes.find(VertexAttribute::JOINTS)->second;
-	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET0_POSITION)) size += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_POSITION)->second;
-	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET1_POSITION)) size += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_POSITION)->second;
-	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET0_NORMAL)) size += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_NORMAL)->second;
-	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET1_NORMAL)) size += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_NORMAL)->second;
+	for (const auto& pair : attributeByteSizes)
+	{
+		if (HasFlag(attributes, pair.first))
+		{
+			size += pair.second;
+		}
+	}
 
 	return size;
 }
@@ -133,14 +136,10 @@ static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interl
 	case VertexAttribute::MORPH_TARGET0_NORMAL: case VertexAttribute::MORPH_TARGET1_NORMAL: // TODO: add tangents
 		FillInterleavedBufferWithAttribute(interleavedBuffer, GetAccessorBytes(accessor, model), attributeByteSizes.find(attribute)->second, GetAttributeByteOffset(attributes, attribute), vertexSizeBytes, accessor.count);
 		break;
-	case VertexAttribute::WEIGHTS:
-	{
+	case VertexAttribute::WEIGHTS: case VertexAttribute::TEXCOORD:
 		assert(accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT && "Normalized unsigned byte and unsigned short not supported for now");
-		auto data = GetAccessorBytes(accessor, model);
-		std::span<glm::vec4> stuff((glm::vec4*)data.data(), accessor.count);
 		FillInterleavedBufferWithAttribute(interleavedBuffer, GetAccessorBytes(accessor, model), attributeByteSizes.find(attribute)->second, GetAttributeByteOffset(attributes, attribute), vertexSizeBytes, accessor.count);
 		break;
-	}
 	case VertexAttribute::JOINTS:
 		if (accessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
 		{
@@ -183,6 +182,12 @@ static std::vector<std::uint8_t> GetInterleavedVertexBuffer(const tinygltf::Prim
 
 	FillInterleavedBufferWithAttribute(buffer, positionsAccessor, vertexSizeBytes, VertexAttribute::POSITION, attributes, model);
 	
+	if (HasFlag(attributes, VertexAttribute::TEXCOORD))
+	{
+		int tcAccessorIndex = primitive.attributes.find("TEXCOORD_0")->second;
+		const tinygltf::Accessor& tcAccessor = model.accessors[tcAccessorIndex];
+		FillInterleavedBufferWithAttribute(buffer, tcAccessor, vertexSizeBytes, VertexAttribute::TEXCOORD, attributes, model);
+	}
 	if (HasFlag(attributes, VertexAttribute::NORMAL))
 	{
 		int normalAccessorIndex = primitive.attributes.find("NORMAL")->second;
@@ -318,48 +323,65 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 
 	// Position
 	int offset = 0;
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+	int location = 0;
+	glEnableVertexAttribArray(location);
+	glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 	offset += attributeByteSizes.find(VertexAttribute::POSITION)->second;
+	location++;
+
+	if (HasFlag(flags, VertexAttribute::TEXCOORD))
+	{
+		glEnableVertexAttribArray(location);
+		glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		offset += attributeByteSizes.find(VertexAttribute::TEXCOORD)->second;
+	}
+	location++;
 
 	if (HasFlag(flags, VertexAttribute::NORMAL))
 	{
-		glEnableVertexAttribArray(1);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(location);
+		glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::NORMAL)->second;
 	}
+	location++;
+
 	if (HasFlag(flags, VertexAttribute::WEIGHTS))
 	{
-		glEnableVertexAttribArray(2);
-		glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(location);
+		glVertexAttribPointer(location, 4, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::WEIGHTS)->second;
 
-		glEnableVertexAttribArray(3);
-		glVertexAttribIPointer(3, 1, GL_UNSIGNED_INT, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(location);
+		glVertexAttribIPointer(location, 1, GL_UNSIGNED_INT, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::JOINTS)->second;
-
 	}
+	location += 2;
+
 	if (HasFlag(flags, VertexAttribute::MORPH_TARGET0_POSITION))
 	{
 		assert(HasFlag(flags, VertexAttribute::MORPH_TARGET1_POSITION));
-		glEnableVertexAttribArray(4);
-		glVertexAttribPointer(4, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(location);
+		glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_POSITION)->second;
 
-		glEnableVertexAttribArray(5);
-		glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(location);
+		glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_POSITION)->second;
 	}
+	location +=2;
+
 	if (HasFlag(flags, VertexAttribute::MORPH_TARGET0_NORMAL))
 	{
 		assert(HasFlag(flags, VertexAttribute::MORPH_TARGET1_NORMAL));
-		glEnableVertexAttribArray(6);
-		glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(location);
+		glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_NORMAL)->second;
-		glEnableVertexAttribArray(7);
-		glVertexAttribPointer(7, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+
+		glEnableVertexAttribArray(location);
+		glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_NORMAL)->second;
 	}
+	location += 2;
 	
 	if (hasIndexBuffer)
 	{

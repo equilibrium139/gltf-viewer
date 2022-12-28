@@ -173,7 +173,7 @@ int main(int argc, char** argv)
     float previousFrameTime = 0.0f;
     float currentFrameTime = 0.0f;
 
-    int selectedModelIndex = 1;
+    int selectedModelIndex = 3;
     Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels);
 
     while (!glfwWindowShouldClose(window))
