@@ -11,12 +11,19 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 
 	camera.position.z = 5.0f;
 
+	int defaultEntityNameSuffix = 0;
+
 	// Nodes
 	for (const auto& node : model.nodes)
 	{
 		entities.emplace_back();
 		Entity& entity = entities.back();
 		entity.name = node.name;
+		if (entity.name.empty())
+		{
+			entity.name = "Entity" + std::to_string(defaultEntityNameSuffix);
+			defaultEntityNameSuffix++;
+		}
 		entity.transform = GetNodeTransform(node);
 		entity.children = node.children;
 

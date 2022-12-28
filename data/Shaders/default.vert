@@ -26,7 +26,7 @@ uniform mat3 normalMatrixVS;
 #endif // HAS_NORMALS
 
 #ifdef HAS_JOINTS
-uniform mat4 skinningMatrices[256];
+uniform mat4 skinningMatrices[128];
 #endif // HAS_JOINTS
 
 #ifdef HAS_MORPH_TARGETS
