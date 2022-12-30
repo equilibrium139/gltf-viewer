@@ -20,6 +20,7 @@ src/Input.h
 src/Mesh.cpp
 src/Mesh.h
 src/PBRMaterial.h
+src/PBRMaterial.cpp
 src/Scene.h
 src/Scene.cpp
 src/Shader.cpp

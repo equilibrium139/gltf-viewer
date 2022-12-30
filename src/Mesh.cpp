@@ -289,25 +289,28 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 	{
 		assert(primitive.mode == GL_TRIANGLES);
 		assert(primitive.indices >= 0 == hasIndexBuffer && "Mesh primitives must all have indices or all not have them.");
+
 		VertexAttribute primitiveFlags = GetPrimitiveVertexLayout(primitive);
 		assert(flags == primitiveFlags && "All mesh primitives must have the same attributes");
+
+		submeshes.emplace_back();
+		Submesh& submesh = submeshes.back();
 		std::vector<std::uint8_t> primitiveVertexBuffer = GetInterleavedVertexBuffer(primitive, primitiveFlags, model);
+		int vertexBufferBytes = vertexBuffer.size();
+		int countVertices = vertexBufferBytes / vertexSizeBytes;
+		submesh.start = countVertices;
+		int countPrimitiveVertices = primitiveVertexBuffer.size() / vertexSizeBytes;
+		submesh.countVerticesOrIndices = countPrimitiveVertices;
 		vertexBuffer.insert(vertexBuffer.end(), primitiveVertexBuffer.begin(), primitiveVertexBuffer.end());
+		submesh.materialIndex = primitive.material;
 
 		if (hasIndexBuffer)
 		{
 			std::vector<std::uint32_t> primitiveIndexBuffer = GetIndexBuffer(primitive, model, primitiveIndicesOffset);
+			submesh.start = indexBuffer.size();
+			submesh.countVerticesOrIndices = primitiveIndexBuffer.size();
 			indexBuffer.insert(indexBuffer.end(), primitiveIndexBuffer.begin(), primitiveIndexBuffer.end());
-			submeshCountVerticesOrIndices.push_back(primitiveIndexBuffer.size());
-			int vertexBufferBytes = vertexBuffer.size();
-			int countVertices = vertexBufferBytes / vertexSizeBytes;
 			primitiveIndicesOffset += countVertices;
-		}
-		else
-		{
-			int primitiveVertexBufferBytes = primitiveVertexBuffer.size();
-			int countPrimitiveVertices = primitiveVertexBufferBytes / vertexSizeBytes;
-			submeshCountVerticesOrIndices.push_back(countPrimitiveVertices);
 		}
 	}
 

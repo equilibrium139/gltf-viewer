@@ -75,6 +75,11 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 		if (sampler.minFilter != -1) glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, sampler.minFilter);
 		if (sampler.magFilter != -1) glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, sampler.magFilter);
 	}
+
+	for (const tinygltf::Material& gltfMaterial : model.materials)
+	{
+		materials.emplace_back(FromGltfMaterial(gltfMaterial, model));
+	}
 }
 
 Shader& GLTFResources::GetMeshShader(const Mesh& mesh)

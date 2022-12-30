@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Mesh.h"
+#include "PBRMaterial.h"
 #include "Shader.h"
 #include "Skeleton.h"
 #include "Texture.h"
@@ -15,6 +16,7 @@ struct GLTFResources
 	std::vector<Mesh> meshes;
 	std::unordered_map<VertexAttribute, Shader> shaders;
 	std::vector<Texture> textures;
+	std::vector<PBRMaterial> materials;
 
 	Shader& GetMeshShader(const Mesh& mesh);
 };

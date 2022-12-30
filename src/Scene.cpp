@@ -260,19 +260,16 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 		}
 		if (entity.mesh->hasIndexBuffer)
 		{
-			std::uint32_t offset = 0;
-			for (std::uint32_t indexCount : entity.mesh->submeshCountVerticesOrIndices)
+			for (const Submesh& submesh : entity.mesh->submeshes)
 			{
-				glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, (const void*)offset);
-				offset += indexCount;
+				glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, (const void*)submesh.start);
 			}
 		}
 		else
 		{
-			std::uint32_t offset = 0;
-			for (std::uint32_t vertexCount : entity.mesh->submeshCountVerticesOrIndices)
+			for (const Submesh& submesh : entity.mesh->submeshes)
 			{
-				glDrawArrays(GL_TRIANGLES, offset, vertexCount);
+				glDrawArrays(GL_TRIANGLES, submesh.start, submesh.countVerticesOrIndices);
 			}
 		}
 	}
