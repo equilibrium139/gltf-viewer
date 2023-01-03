@@ -9,13 +9,15 @@ struct PBRMaterial
 {
 	std::string name;
 	glm::vec4 baseColorFactor;
-	int baseColorTextureIdx;
+	int baseColorTextureIdx; // guaranteed >= 0
 	float metallicFactor;
 	float roughnessFactor;
-	int metallicRoughnessTextureIdx;
+	int metallicRoughnessTextureIdx; // guaranteed >= 0
 	int normalTextureIdx;
+	float occlusionStrength;
+	int occlusionTextureIdx; // guaranteed >= 0
 
-	// TODO: add support for occlusion and emissive textures and other gltf material values
+	// TODO: add support emissive textures and other missing gltf material values
 };
 
-PBRMaterial FromGltfMaterial(const tinygltf::Material& gltfMaterial, const tinygltf::Model& model);
+PBRMaterial FromGltfMaterial(const tinygltf::Material& gltfMaterial, const tinygltf::Model& model, int white1x1RGBATextureIndex, int max1x1RedTextureIndex);

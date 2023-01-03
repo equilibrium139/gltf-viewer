@@ -47,8 +47,9 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 
 	for (const tinygltf::Texture& texture : model.textures)
 	{
+		assert(texture.source >= 0);
+
 		const tinygltf::Image& image = model.images[texture.source];
-		const tinygltf::Sampler& sampler = model.samplers[texture.sampler];
 
 		int numComponents = image.component;
 		GLenum format;
@@ -64,21 +65,31 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 
 		textures.emplace_back();
 		auto& addedTexture = textures.back();
-		
+
 		glGenTextures(1, &addedTexture.id);
 		glBindTexture(GL_TEXTURE_2D, addedTexture.id);
 		glTexImage2D(GL_TEXTURE_2D, 0, format, image.width, image.height, 0, format, image.pixel_type, image.image.data());
 		glGenerateMipmap(GL_TEXTURE_2D);
 
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, sampler.wrapS);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, sampler.wrapT);
-		if (sampler.minFilter != -1) glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, sampler.minFilter);
-		if (sampler.magFilter != -1) glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, sampler.magFilter);
+		if (texture.sampler >= 0)
+		{
+			const tinygltf::Sampler& sampler = model.samplers[texture.sampler];
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, sampler.wrapS);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, sampler.wrapT);
+			if (sampler.minFilter != -1) glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, sampler.minFilter);
+			if (sampler.magFilter != -1) glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, sampler.magFilter);
+		}
 	}
+
+	white1x1RGBAIndex = textures.size();
+	textures.emplace_back(Texture::White1x1TextureRGBA());
+
+	max1x1RedIndex = textures.size();
+	textures.emplace_back(Texture::Max1x1TextureRed());
 
 	for (const tinygltf::Material& gltfMaterial : model.materials)
 	{
-		materials.emplace_back(FromGltfMaterial(gltfMaterial, model));
+		materials.emplace_back(FromGltfMaterial(gltfMaterial, model, white1x1RGBAIndex, max1x1RedIndex));
 	}
 }
 

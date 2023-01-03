@@ -237,28 +237,26 @@ static std::vector<std::uint8_t> GetInterleavedVertexBuffer(const tinygltf::Prim
 static std::vector<std::uint32_t> GetIndexBuffer(const tinygltf::Primitive& primitive, const tinygltf::Model& model, int offset)
 {
 	const tinygltf::Accessor& indicesAccessor = model.accessors[primitive.indices];
-	assert(indicesAccessor.byteOffset == 0);
+	auto indicesAccessorBytes = GetAccessorBytes(indicesAccessor, model);
 	std::vector<std::uint32_t> indexBuffer(indicesAccessor.count);
 	int componentSizeBytes = tinygltf::GetComponentSizeInBytes(indicesAccessor.componentType);
-	const tinygltf::BufferView& indicesBV = model.bufferViews[indicesAccessor.bufferView];
-	const tinygltf::Buffer& buffer = model.buffers[indicesBV.buffer];
 
 	if (componentSizeBytes == 4)
 	{
-		std::span<std::uint32_t> indicesAccessorData((std::uint32_t*)(buffer.data.data() + indicesBV.byteOffset), indicesAccessor.count);
+		std::span<std::uint32_t> indicesAccessorData((std::uint32_t*)(indicesAccessorBytes.data()), indicesAccessor.count);
 		std::transform(indicesAccessorData.begin(), indicesAccessorData.end(), indexBuffer.begin(), 
 			[offset](std::uint32_t index) { return index + offset; });
 	}
 	else if (componentSizeBytes == 2)
 	{
-		std::span<std::uint16_t> indicesAccessorData((std::uint16_t*)(buffer.data.data() + indicesBV.byteOffset), indicesAccessor.count);
+		std::span<std::uint16_t> indicesAccessorData((std::uint16_t*)(indicesAccessorBytes.data()), indicesAccessor.count);
 		std::transform(indicesAccessorData.begin(), indicesAccessorData.end(), indexBuffer.begin(),
 			[offset](std::uint16_t index) { return std::uint32_t(index) + offset; });
 	}
 	else
 	{
 		assert(componentSizeBytes == 1 && "Invalid index buffer component size.");
-		std::span<std::uint8_t> indicesAccessorData((std::uint8_t*)(buffer.data.data() + indicesBV.byteOffset), indicesAccessor.count);
+		std::span<std::uint8_t> indicesAccessorData((std::uint8_t*)(indicesAccessorBytes.data()), indicesAccessor.count);
 		std::transform(indicesAccessorData.begin(), indicesAccessorData.end(), indexBuffer.begin(),
 			[offset](std::uint8_t index) { return std::uint32_t(index) + offset; });
 	}
@@ -326,65 +324,58 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 
 	// Position
 	int offset = 0;
-	int location = 0;
-	glEnableVertexAttribArray(location);
-	glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 	offset += attributeByteSizes.find(VertexAttribute::POSITION)->second;
-	location++;
 
 	if (HasFlag(flags, VertexAttribute::TEXCOORD))
 	{
-		glEnableVertexAttribArray(location);
-		glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::TEXCOORD)->second;
 	}
-	location++;
 
 	if (HasFlag(flags, VertexAttribute::NORMAL))
 	{
-		glEnableVertexAttribArray(location);
-		glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::NORMAL)->second;
 	}
-	location++;
 
 	if (HasFlag(flags, VertexAttribute::WEIGHTS))
 	{
-		glEnableVertexAttribArray(location);
-		glVertexAttribPointer(location, 4, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(3);
+		glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::WEIGHTS)->second;
 
-		glEnableVertexAttribArray(location);
-		glVertexAttribIPointer(location, 1, GL_UNSIGNED_INT, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(4);
+		glVertexAttribIPointer(4, 1, GL_UNSIGNED_INT, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::JOINTS)->second;
 	}
-	location += 2;
 
 	if (HasFlag(flags, VertexAttribute::MORPH_TARGET0_POSITION))
 	{
 		assert(HasFlag(flags, VertexAttribute::MORPH_TARGET1_POSITION));
-		glEnableVertexAttribArray(location);
-		glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(5);
+		glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_POSITION)->second;
 
-		glEnableVertexAttribArray(location);
-		glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(6);
+		glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_POSITION)->second;
 	}
-	location +=2;
 
 	if (HasFlag(flags, VertexAttribute::MORPH_TARGET0_NORMAL))
 	{
 		assert(HasFlag(flags, VertexAttribute::MORPH_TARGET1_NORMAL));
-		glEnableVertexAttribArray(location);
-		glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(7);
+		glVertexAttribPointer(7, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_NORMAL)->second;
 
-		glEnableVertexAttribArray(location);
-		glVertexAttribPointer(location, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glEnableVertexAttribArray(8);
+		glVertexAttribPointer(8, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_NORMAL)->second;
 	}
-	location += 2;
 	
 	if (hasIndexBuffer)
 	{

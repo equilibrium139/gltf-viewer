@@ -191,7 +191,7 @@ void Scene::Render(float aspectRatio)
 	const auto projection = camera.GetProjectionMatrix(aspectRatio);
 	for (const Entity& entity : entities)
 	{
-		RenderEntity(entity, glm::mat4(1.0f), view, projection);
+		if (entity.parent < 0) RenderEntity(entity, glm::mat4(1.0f), view, projection);
 	}
 }
 
@@ -262,6 +262,39 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 		{
 			for (const Submesh& submesh : entity.mesh->submeshes)
 			{
+				if (submesh.materialIndex >= 0)
+				{
+					const PBRMaterial& material = resources.materials[submesh.materialIndex];
+					shader.SetVec4("material.baseColorFactor", material.baseColorFactor);
+					shader.SetFloat("material.metallicFactor", material.metallicFactor);
+					shader.SetFloat("material.roughnessFactor", material.roughnessFactor);
+					shader.SetFloat("material.occlusionStrength", material.occlusionStrength);
+
+					int textureUnit = 0;
+					glActiveTexture(GL_TEXTURE0 + textureUnit);
+					glBindTexture(GL_TEXTURE_2D, resources.textures[material.baseColorTextureIdx].id);
+					shader.SetInt("material.baseColorTexture", textureUnit);
+					textureUnit++;
+
+					glActiveTexture(GL_TEXTURE0 + textureUnit);
+					glBindTexture(GL_TEXTURE_2D, resources.textures[material.metallicRoughnessTextureIdx].id);
+					shader.SetInt("material.metallicRoughnessTexture", textureUnit);
+					textureUnit++;
+
+					//if (material.normalTextureIdx >= 0)
+					//{
+					//	glActiveTexture(GL_TEXTURE0 + textureUnit);
+					//	glBindTexture(GL_TEXTURE_2D, resources.textures[material.normalTextureIdx].id);
+					//	shader.SetInt("material.baseColorTexture", textureUnit);
+					//	textureUnit++;
+					//}
+					
+					glActiveTexture(GL_TEXTURE0 + textureUnit);
+					glBindTexture(GL_TEXTURE_2D, resources.textures[material.occlusionTextureIdx].id);
+					shader.SetInt("material.occlusionTexture", textureUnit);
+					textureUnit++;
+				}
+
 				glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, (const void*)submesh.start);
 			}
 		}
@@ -269,6 +302,38 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 		{
 			for (const Submesh& submesh : entity.mesh->submeshes)
 			{
+				if (submesh.materialIndex >= 0)
+				{
+					const PBRMaterial& material = resources.materials[submesh.materialIndex];
+					shader.SetVec4("material.baseColorFactor", material.baseColorFactor);
+					shader.SetFloat("material.metallicFactor", material.metallicFactor);
+					shader.SetFloat("material.roughnessFactor", material.roughnessFactor);
+					shader.SetFloat("material.occlusionStrength", material.occlusionStrength);
+
+					int textureUnit = 0;
+					glActiveTexture(GL_TEXTURE0 + textureUnit);
+					glBindTexture(GL_TEXTURE_2D, resources.textures[material.baseColorTextureIdx].id);
+					shader.SetInt("material.baseColorTexture", textureUnit);
+					textureUnit++;
+
+					glActiveTexture(GL_TEXTURE0 + textureUnit);
+					glBindTexture(GL_TEXTURE_2D, resources.textures[material.metallicRoughnessTextureIdx].id);
+					shader.SetInt("material.metallicRoughnessTexture", textureUnit);
+					textureUnit++;
+
+					//if (material.normalTextureIdx >= 0)
+					//{
+					//	glActiveTexture(GL_TEXTURE0 + textureUnit);
+					//	glBindTexture(GL_TEXTURE_2D, resources.textures[material.normalTextureIdx].id);
+					//	shader.SetInt("material.baseColorTexture", textureUnit);
+					//	textureUnit++;
+					//}
+
+					glActiveTexture(GL_TEXTURE0 + textureUnit);
+					glBindTexture(GL_TEXTURE_2D, resources.textures[material.occlusionTextureIdx].id);
+					shader.SetInt("material.occlusionTexture", textureUnit);
+					textureUnit++;
+				}
 				glDrawArrays(GL_TRIANGLES, submesh.start, submesh.countVerticesOrIndices);
 			}
 		}

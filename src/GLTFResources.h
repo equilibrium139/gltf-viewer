@@ -17,6 +17,8 @@ struct GLTFResources
 	std::unordered_map<VertexAttribute, Shader> shaders;
 	std::vector<Texture> textures;
 	std::vector<PBRMaterial> materials;
+	int white1x1RGBAIndex;
+	int max1x1RedIndex;
 
 	Shader& GetMeshShader(const Mesh& mesh);
 };

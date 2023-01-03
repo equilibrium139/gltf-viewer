@@ -1,7 +1,7 @@
 layout(location = 0) in vec3 aBasePos;
 
 #ifdef HAS_TEXCOORD
-layout(location = 1) in vec3 aTexcoords;
+layout(location = 1) in vec2 aTexcoords;
 #endif // HAS_TEXCOORD
 
 #ifdef HAS_NORMALS
@@ -39,10 +39,12 @@ uniform float morph2Weight;
 #endif
 
 out vec3 surfacePosVS;
-
 #ifdef HAS_NORMALS
 out vec3 surfaceNormalVS;
 #endif // HAS_NORMALS
+#ifdef HAS_TEXCOORD
+out vec2 texCoords;
+#endif // HAS_TEXCOORD
 
 void main()
 {
@@ -84,6 +86,10 @@ void main()
         surfaceNormalVS = normalize(normalMatrixVS * surfaceNormalVS);
     #endif // HAS_JOINTS
 #endif // HAS_NORMALS
+
+#ifdef HAS_TEXCOORD
+    texCoords = aTexcoords;
+#endif
 
     gl_Position = projection * vec4(surfacePosVS, 1.0);
 }
