@@ -19,4 +19,5 @@ struct Mesh
 	GLuint VAO;
 	VertexAttribute flags = VertexAttribute::POSITION;
 	bool hasIndexBuffer;
+	bool flatShading = false;
 };

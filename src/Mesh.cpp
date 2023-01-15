@@ -274,6 +274,10 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 	bool hasMorphTargets = HasFlag(flags, VertexAttribute::MORPH_TARGET0_POSITION);
 	assert((!hasJoints && !hasMorphTargets) || (hasJoints != hasMorphTargets) && "Morph targets and skeletal animation on same mesh not supported");
 
+	bool hasMaterial = mesh.primitives[0].material >= 0;
+	bool hasNormals = HasFlag(flags, VertexAttribute::NORMAL);
+	flatShading = hasMaterial && !hasNormals;
+
 	const int vertexSizeBytes = GetVertexSizeBytes(flags);
 	hasIndexBuffer = mesh.primitives[0].indices >= 0;
 
@@ -286,10 +290,13 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 	for (const tinygltf::Primitive& primitive : mesh.primitives)
 	{
 		assert(primitive.mode == GL_TRIANGLES);
+
+		// TODO: indices and material restrictions are temporary conveniences. will be removed eventually
 		assert(primitive.indices >= 0 == hasIndexBuffer && "Mesh primitives must all have indices or all not have them.");
 
 		VertexAttribute primitiveFlags = GetPrimitiveVertexLayout(primitive);
 		assert(flags == primitiveFlags && "All mesh primitives must have the same attributes");
+		assert(primitive.material >= 0 == mesh.primitives[0].material >= 0 && "Mesh primitives must all have materials or all not have them");
 
 		submeshes.emplace_back();
 		Submesh& submesh = submeshes.back();

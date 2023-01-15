@@ -5,9 +5,11 @@
 #include <tuple>
 #include <vector>
 
-static std::vector<std::string> GetShaderDefines(VertexAttribute flags)
+static std::vector<std::string> GetShaderDefines(const Mesh& mesh)
 {
 	std::vector<std::string> defines;
+
+	const auto flags = mesh.flags;
 
 	if (HasFlag(flags, VertexAttribute::TEXCOORD))
 	{
@@ -25,6 +27,11 @@ static std::vector<std::string> GetShaderDefines(VertexAttribute flags)
 	{
 		defines.emplace_back("HAS_MORPH_TARGETS");
 	}
+	if (mesh.flatShading)
+	{
+		defines.emplace_back("FLAT_SHADING");
+	}
+
 
 	return defines;
 }
@@ -40,7 +47,7 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 		// TODO: make shaders depend on materials as well
 		if (!shaders.contains(addedMesh.flags))
 		{
-			auto defines = GetShaderDefines(addedMesh.flags);
+			auto defines = GetShaderDefines(addedMesh);
 			shaders.insert_or_assign(addedMesh.flags, Shader("Shaders/default.vert", "Shaders/default.frag", nullptr, {}, defines));
 		}
 	}

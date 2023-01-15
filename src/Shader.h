@@ -52,6 +52,7 @@ private:
 			return iter->second;
 		}
 		int location = glGetUniformLocation(id, name.c_str());
+		assert(location >= 0);
 		cachedUniformLocations[name] = location;
 		return location;
 	}

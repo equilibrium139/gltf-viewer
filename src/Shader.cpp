@@ -19,9 +19,11 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 		definesString += "#define " + define + "\n";
 	}
 
+	std::cout << definesString << '\n';
+
 	const char* vShaderSources[3] = { version.c_str(), definesString.c_str(), vShaderCode};
 	const char* fShaderSources[3] = { version.c_str(), definesString.c_str(), fShaderCode};
-	
+
 	glShaderSource(vertexShader, 3, vShaderSources, NULL);
 	glShaderSource(fragmentShader, 3, fShaderSources, NULL);
 

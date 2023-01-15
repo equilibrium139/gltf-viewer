@@ -1,7 +1,7 @@
 #define PI 3.14159
 
 // Lighting only make sense if normals are avaialable
-#ifdef HAS_NORMALS
+#if defined(HAS_NORMALS) || defined(FLAT_SHADING)
 
 struct PointLight
 {
@@ -63,7 +63,7 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }  
 
-#endif // HAS_NORMALS
+#endif // HAS_NORMALS || FLAT_SHADING
 
 #ifdef HAS_TEXCOORD
 in vec2 texCoords;
@@ -79,6 +79,13 @@ void main()
 {
 #ifdef HAS_NORMALS
     vec3 unitNormal = normalize(surfaceNormalVS);
+#elif defined(FLAT_SHADING)
+    vec3 dxTangent = dFdx(surfacePosVS);
+    vec3 dyTangent = dFdy(surfacePosVS);
+    vec3 unitNormal = normalize(cross(dxTangent, dyTangent));
+#endif // HAS_NORMALS
+    
+#if defined(HAS_NORMALS) || defined(FLAT_SHADING)
     vec3 surfaceToCamera = -normalize(surfacePosVS);
     vec3 surfaceToLight = normalize(pointLight.positionVS - surfacePosVS);
     #ifdef HAS_TEXCOORD
