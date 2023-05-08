@@ -2,7 +2,7 @@
 
 Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * geometryPath, const std::vector<UniformBlockBinding>& ub_bindings, const std::vector<std::string> defines)
 {
-	static const std::string version = "#version 330 core\n";
+	static const std::string version = "#version 430 core\n";
 
 	unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
 	unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);

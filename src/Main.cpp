@@ -103,7 +103,7 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
         return nullptr;
     }
 
-    assert(model.scenes.size() == 1);
+    assert(model.scenes.size() == 1); // cba
     auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model));
     return &pair.first->second;
 }
@@ -174,6 +174,10 @@ int main(int argc, char** argv)
     float currentFrameTime = 0.0f;
 
     int selectedModelIndex = 3;
+    while (sampleModelNames[selectedModelIndex] != "BrainStem")
+    {
+        selectedModelIndex++;
+    }
     Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels);
 
     while (!glfwWindowShouldClose(window))
@@ -185,43 +189,43 @@ int main(int argc, char** argv)
 
         ProcessInput(window, input, io);
 
-        ImGui_ImplOpenGL3_NewFrame();
+       /* ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
-        ImGui::NewFrame();
+        ImGui::NewFrame();*/
 
-        ImGui::Begin("Model Select");
+        //ImGui::Begin("Model Select");
 
-        const int num_models = (int)sampleModelNames.size();
-        auto& model_combo_preview_value = sampleModelNames[selectedModelIndex];
-        if (ImGui::BeginCombo("Model", model_combo_preview_value.c_str()))
-        {
-            for (int n = 0; n < num_models; n++)
-            {
-                const bool is_selected = (selectedModelIndex == n);
-                if (ImGui::Selectable(sampleModelNames[n].c_str(), is_selected))
-                {
-                    selectedModelIndex = n;
-                    auto sceneIter = sampleModels.find(sampleModelNames[selectedModelIndex]);
-                    if (sceneIter != sampleModels.end())
-                    {
-                        selectedScene = &sceneIter->second;
-                    }
-                    else
-                    {
-                        selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels);
-                    }
-                }
+        //const int num_models = (int)sampleModelNames.size();
+        //auto& model_combo_preview_value = sampleModelNames[selectedModelIndex];
+        //if (ImGui::BeginCombo("Model", model_combo_preview_value.c_str()))
+        //{
+        //    for (int n = 0; n < num_models; n++)
+        //    {
+        //        const bool is_selected = (selectedModelIndex == n);
+        //        if (ImGui::Selectable(sampleModelNames[n].c_str(), is_selected))
+        //        {
+        //            selectedModelIndex = n;
+        //            auto sceneIter = sampleModels.find(sampleModelNames[selectedModelIndex]);
+        //            if (sceneIter != sampleModels.end())
+        //            {
+        //                selectedScene = &sceneIter->second;
+        //            }
+        //            else
+        //            {
+        //                selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels);
+        //            }
+        //        }
 
-                // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-                if (is_selected)
-                {
-                    ImGui::SetItemDefaultFocus();
-                }
-            }
-            ImGui::EndCombo();
-        }
+        //        // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+        //        if (is_selected)
+        //        {
+        //            ImGui::SetItemDefaultFocus();
+        //        }
+        //    }
+        //    ImGui::EndCombo();
+        //}
 
-        ImGui::End();
+        //ImGui::End();
 
         // Rendering
         int display_w, display_h;
@@ -235,8 +239,8 @@ int main(int argc, char** argv)
             selectedScene->UpdateAndRender(input);
         }
 
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        //ImGui::Render();
+        //ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(window);
 

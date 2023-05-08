@@ -17,6 +17,8 @@ struct Mesh
 	Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model);
 	std::vector<Submesh> submeshes;
 	GLuint VAO;
+	GLuint VBO;
+	GLuint IBO;
 	VertexAttribute flags = VertexAttribute::POSITION;
 	bool hasIndexBuffer;
 	bool flatShading = false;

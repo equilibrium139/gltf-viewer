@@ -41,6 +41,12 @@ inline VertexAttribute& operator &= (VertexAttribute& lhs, VertexAttribute rhs)
     return lhs;
 }
 
+inline VertexAttribute operator ~(VertexAttribute attr)
+{
+    using T = std::underlying_type_t<VertexAttribute>;
+    return (VertexAttribute)~(T)(attr);
+}
+
 inline bool HasFlag(VertexAttribute flags, VertexAttribute flag_to_check)
 {
     return (std::underlying_type_t<VertexAttribute>)(flags & flag_to_check) != 0;

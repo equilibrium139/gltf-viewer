@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include "GLTFHelpers.h"
+#include <iostream>
 #include <utility>
 #include <vector>
 #include <span>
@@ -315,14 +316,63 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 			submesh.start = indexBuffer.size();
 			submesh.countVerticesOrIndices = primitiveIndexBuffer.size();
 			indexBuffer.insert(indexBuffer.end(), primitiveIndexBuffer.begin(), primitiveIndexBuffer.end());
-			primitiveIndicesOffset += countVertices;
+			primitiveIndicesOffset += countPrimitiveVertices;
 		}
+	}
+
+	// verify index buffer validity
+	if (hasIndexBuffer)
+	{
+		bool outOfBoundsIndex = false;
+		std::uint32_t numVertices = vertexBuffer.size() / vertexSizeBytes;
+		std::uint32_t daCulprit;
+		for (std::uint32_t index : indexBuffer)
+		{
+			if (index >= numVertices)
+			{
+				outOfBoundsIndex = true;
+				daCulprit = index;
+				break;
+			}
+		}
+		assert(!outOfBoundsIndex && "Out of bounds index in index buffer");
+
+		// verify submesh range into index buffer is valid
+		bool outOfBoundsSubmesh = false;
+		int i = 0;
+		int j = 20;
+
+		for (const Submesh& submesh : submeshes)
+		{
+			
+			int submeshEnd = submesh.start + submesh.countVerticesOrIndices - 1;
+			assert(submesh.countVerticesOrIndices % 3 == 0);
+			if (submesh.start < 0 || submesh.start >= indexBuffer.size()
+				|| submeshEnd <= 0 || submeshEnd >= indexBuffer.size())
+			{
+				outOfBoundsSubmesh = true;
+				break;
+			}
+			if (i == j)
+			{
+				std::uint32_t max = 0;
+				for (int i = submesh.start; i <= submeshEnd; i++)
+				{
+					if (indexBuffer[i] > max)
+					{
+						max = indexBuffer[i];
+					}
+				}
+				std::cout << "Max: " << max << '\n';
+			}
+			i++;
+		}
+		assert(!outOfBoundsSubmesh && "Out of bounds index in index buffer");
 	}
 
 	glGenVertexArrays(1, &VAO);
 	glBindVertexArray(VAO);
 	
-	GLuint VBO;
 	glGenBuffers(1, &VBO);
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
 	glBufferData(GL_ARRAY_BUFFER, vertexBuffer.size(), vertexBuffer.data(), GL_STATIC_DRAW);
@@ -338,7 +388,7 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 	if (HasFlag(flags, VertexAttribute::TEXCOORD))
 	{
 		glEnableVertexAttribArray(1);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::TEXCOORD)->second;
 	}
 
@@ -383,12 +433,19 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 		glVertexAttribPointer(8, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_NORMAL)->second;
 	}
+
+	GLint vboID = 0;
+	glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &vboID);
+	assert(vboID == VBO);
+
 	
 	if (hasIndexBuffer)
 	{
-		GLuint IBO;
 		glGenBuffers(1, &IBO);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexBuffer.size() * sizeof(indexBuffer[0]), indexBuffer.data(), GL_STATIC_DRAW);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexBuffer.size() * sizeof(std::uint32_t), indexBuffer.data(), GL_STATIC_DRAW);
+		GLint iboID;
+		glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &iboID);
+		assert(iboID == IBO);
 	}
 }
