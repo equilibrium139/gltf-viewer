@@ -30,9 +30,10 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 		// TODO: add support for cameras
 		if (node.mesh >= 0)
 		{
-			entity.mesh = &resources.meshes[node.mesh];
+			entity.meshIdx = node.mesh;
+			Mesh& entityMesh = resources.meshes[entity.meshIdx];
 			// TODO: add support for more than 2 morph targets
-			bool hasMorphTargets = HasFlag(entity.mesh->flags, VertexAttribute::MORPH_TARGET0_POSITION);
+			bool hasMorphTargets = HasFlag(entityMesh.flags, VertexAttribute::MORPH_TARGET0_POSITION);
 			if (hasMorphTargets)
 			{
 				entity.morphTargetWeights.resize(2);
@@ -90,7 +91,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 	{
 		if (model.nodes[i].skin >= 0)
 		{
-			entities[i].skeleton = &skeletons[model.nodes[i].skin];
+			entities[i].skeletonIdx = model.nodes[i].skin;
 		}
 	}
 
@@ -109,9 +110,9 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 			
 			// Entity might already have another animated channel in this animation, check if so
 			auto entityAnimationIter = std::find_if(animation.entityAnimations.begin(), animation.entityAnimations.end(),
-				[sceneEntity](const EntityAnimation& entityAnimation)
+				[&channel](const EntityAnimation& entityAnimation)
 				{
-					return entityAnimation.entity == sceneEntity;
+					return entityAnimation.entityIdx == channel.target_node;
 				});
 			EntityAnimation* entityAnimation;
 			if (entityAnimationIter != animation.entityAnimations.end())
@@ -124,7 +125,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 				entityAnimation = &animation.entityAnimations.back();
 			}
 				
-			entityAnimation->entity = sceneEntity;
+			entityAnimation->entityIdx = channel.target_node;
 
 			const auto& sampler = gltfAnimation.samplers[channel.sampler];
 			InterpolationType method = InterpolationType::LINEAR;
@@ -212,12 +213,12 @@ void Scene::UpdateAndRender(const Input& input)
 
 		for (const auto& entityAnim : anim.entityAnimations)
 		{
-			Entity* entity = entityAnim.entity;
+			Entity& entity = entities[entityAnim.entityIdx];
 
-			if (entityAnim.translations.values.size() > 0) entity->transform.translation = SampleAt(entityAnim.translations, normalizedTime);
-			if (entityAnim.scales.values.size() > 0) entity->transform.scale = SampleAt(entityAnim.scales, normalizedTime);
-			if (entityAnim.rotations.values.size() > 0) entity->transform.rotation = SampleAt(entityAnim.rotations, normalizedTime);
-			if (entityAnim.weights.values.size() > 0) entity->morphTargetWeights = SampleWeightsAt(entityAnim.weights, normalizedTime);
+			if (entityAnim.translations.values.size() > 0) entity.transform.translation = SampleAt(entityAnim.translations, normalizedTime);
+			if (entityAnim.scales.values.size() > 0) entity.transform.scale = SampleAt(entityAnim.scales, normalizedTime);
+			if (entityAnim.rotations.values.size() > 0) entity.transform.rotation = SampleAt(entityAnim.rotations, normalizedTime);
+			if (entityAnim.weights.values.size() > 0) entity.morphTargetWeights = SampleWeightsAt(entityAnim.weights, normalizedTime);
 		}
 	}
 
@@ -231,15 +232,16 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 {
 	glm::mat4 globalTransform = parentTransform * entity.transform.GetMatrix();
 	glm::mat4 modelView = view * globalTransform;
-
-	if (entity.mesh != nullptr)
+	if (entity.meshIdx >= 0)
 	{
-		glBindVertexArray(entity.mesh->VAO);
-		Shader& shader = resources.GetMeshShader(*entity.mesh); 
+		Mesh& entityMesh = resources.meshes[entity.meshIdx];
+		glBindVertexArray(entityMesh.VAO);
+
+		Shader& shader = resources.GetMeshShader(entityMesh);
 		shader.use();
 		shader.SetMat4("modelView", glm::value_ptr(modelView));
 		shader.SetMat4("projection", glm::value_ptr(projection));
-		bool hasNormals = HasFlag(entity.mesh->flags, VertexAttribute::NORMAL);
+		bool hasNormals = HasFlag(entityMesh.flags, VertexAttribute::NORMAL);
 		if (hasNormals)
 		{
 			glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelView)));
@@ -247,28 +249,28 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 			shader.SetVec3("pointLight.positionVS", glm::vec3(0.0f, 0.0f, 0.0f));
 			shader.SetVec3("pointLight.color", glm::vec3(0.5f, 0.5f, 0.5f));
 		}
-		if (entity.skeleton != nullptr)
+		if (entity.skeletonIdx >= 0)
 		{
-			auto skinningMatrices = ComputeSkinningMatrices(*entity.skeleton, entities);
+			auto skinningMatrices = ComputeSkinningMatrices(skeletons[entity.skeletonIdx], entities);
 			shader.SetMat4("skinningMatrices", glm::value_ptr(skinningMatrices.front()), (int)skinningMatrices.size());
 		}
-		bool hasMorphTargets = HasFlag(entity.mesh->flags, VertexAttribute::MORPH_TARGET0_POSITION);
+		bool hasMorphTargets = HasFlag(entityMesh.flags, VertexAttribute::MORPH_TARGET0_POSITION);
 		if (hasMorphTargets)
 		{
 			shader.SetFloat("morph1Weight", entity.morphTargetWeights[0]);
 			shader.SetFloat("morph2Weight", entity.morphTargetWeights[1]);
 		}
-			for (const Submesh& submesh : entity.mesh->submeshes)
+		for (const Submesh& submesh : entityMesh.submeshes)
+		{
+			if (submesh.materialIndex >= 0)
 			{
-				if (submesh.materialIndex >= 0)
-				{
-					const PBRMaterial& material = resources.materials[submesh.materialIndex];
-					shader.SetVec4("material.baseColorFactor", material.baseColorFactor);
-					shader.SetFloat("material.metallicFactor", material.metallicFactor);
-					shader.SetFloat("material.roughnessFactor", material.roughnessFactor);
-					shader.SetFloat("material.occlusionStrength", material.occlusionStrength);
+				const PBRMaterial& material = resources.materials[submesh.materialIndex];
+				shader.SetVec4("material.baseColorFactor", material.baseColorFactor);
+				shader.SetFloat("material.metallicFactor", material.metallicFactor);
+				shader.SetFloat("material.roughnessFactor", material.roughnessFactor);
+				shader.SetFloat("material.occlusionStrength", material.occlusionStrength);
 
-				bool hasTextureCoords = HasFlag(entity.mesh->flags, VertexAttribute::TEXCOORD);
+				bool hasTextureCoords = HasFlag(entityMesh.flags, VertexAttribute::TEXCOORD);
 
 				if (hasTextureCoords)
 				{

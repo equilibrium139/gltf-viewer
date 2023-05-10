@@ -28,7 +28,7 @@ struct PropertyAnimation
 
 struct EntityAnimation
 {
-	Entity* entity;
+	int entityIdx;
 	PropertyAnimation<glm::vec3> translations;
 	PropertyAnimation<glm::vec3> scales;
 	PropertyAnimation<glm::quat> rotations;

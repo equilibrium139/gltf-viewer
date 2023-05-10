@@ -12,7 +12,7 @@ struct Entity
 	Transform transform;
 	std::vector<int> children;
 	int parent = -1;
-	const Mesh* mesh = nullptr;
-	const Skeleton* skeleton = nullptr;
+	int meshIdx = -1;
+	int skeletonIdx = -1;
 	std::vector<float> morphTargetWeights;
 };
