@@ -103,7 +103,7 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
         return nullptr;
     }
 
-    assert(model.scenes.size() == 1);
+    assert(model.scenes.size() == 1); // cba
     auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model));
     return &pair.first->second;
 }
@@ -174,6 +174,10 @@ int main(int argc, char** argv)
     float currentFrameTime = 0.0f;
 
     int selectedModelIndex = 3;
+    while (sampleModelNames[selectedModelIndex] != "BrainStem")
+    {
+        selectedModelIndex++;
+    }
     Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels);
 
     while (!glfwWindowShouldClose(window))

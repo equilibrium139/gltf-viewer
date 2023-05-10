@@ -12,7 +12,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 	camera.position.z = 5.0f;
 
 	int defaultEntityNameSuffix = 0;
-
+	
 	// Nodes
 	for (const auto& node : model.nodes)
 	{
@@ -224,8 +224,11 @@ void Scene::UpdateAndRender(const Input& input)
 
 	RenderUI();
 
-	const float aspectRatio = (float)input.windowWidth / (float)input.windowHeight;
-	Render(aspectRatio);
+	if (input.windowWidth != 0 && input.windowHeight != 0)
+	{
+		const float aspectRatio = (float)input.windowWidth / (float)input.windowHeight;
+		Render(aspectRatio);
+	}
 }
 
 void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection)
@@ -293,19 +296,19 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 					//	shader.SetInt("material.baseColorTexture", textureUnit);
 					//	textureUnit++;
 					//}
-					
+
 					glActiveTexture(GL_TEXTURE0 + textureUnit);
 					glBindTexture(GL_TEXTURE_2D, resources.textures[material.occlusionTextureIdx].id);
 					shader.SetInt("material.occlusionTexture", textureUnit);
 					textureUnit++;
 				}
 			}
-			if (entity.mesh->hasIndexBuffer)
+			if (entityMesh.hasIndexBuffer)
 			{
-				glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, (const void*)submesh.start);
+				glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, (const void*)(submesh.start * sizeof(std::uint32_t)));
 			}
-		else
-		{
+			else
+			{
 				glDrawArrays(GL_TRIANGLES, submesh.start, submesh.countVerticesOrIndices);
 			}
 		}

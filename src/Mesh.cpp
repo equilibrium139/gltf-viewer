@@ -285,8 +285,6 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 	std::vector<std::uint8_t> vertexBuffer;
 	std::vector<std::uint32_t> indexBuffer;
 
-	int primitiveIndicesOffset = 0;
-
 	for (const tinygltf::Primitive& primitive : mesh.primitives)
 	{
 		assert(primitive.mode == GL_TRIANGLES);
@@ -311,11 +309,11 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 
 		if (hasIndexBuffer)
 		{
+			int primitiveIndicesOffset = countVertices;
 			std::vector<std::uint32_t> primitiveIndexBuffer = GetIndexBuffer(primitive, model, primitiveIndicesOffset);
 			submesh.start = indexBuffer.size();
 			submesh.countVerticesOrIndices = primitiveIndexBuffer.size();
 			indexBuffer.insert(indexBuffer.end(), primitiveIndexBuffer.begin(), primitiveIndexBuffer.end());
-			primitiveIndicesOffset += countVertices;
 		}
 	}
 
@@ -338,7 +336,7 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 	if (HasFlag(flags, VertexAttribute::TEXCOORD))
 	{
 		glEnableVertexAttribArray(1);
-		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::TEXCOORD)->second;
 	}
 
@@ -383,7 +381,7 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 		glVertexAttribPointer(8, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_NORMAL)->second;
 	}
-	
+
 	if (hasIndexBuffer)
 	{
 		GLuint IBO;
