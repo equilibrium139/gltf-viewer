@@ -9,16 +9,19 @@
 #include "VertexAttribute.h"
 #include <vector>
 #include <unordered_map>
+#include <utility>
 
 struct GLTFResources
 {
 	GLTFResources(const tinygltf::Model& model);
 	std::vector<Mesh> meshes;
-	std::unordered_map<VertexAttribute, Shader> shaders;
+	// TODO: make shader depend on material as well
+	using ShaderKey = std::pair<VertexAttribute, bool>; // bool = flatShading
+	std::vector<std::pair<ShaderKey, Shader>> shaders;
 	std::vector<Texture> textures;
 	std::vector<PBRMaterial> materials;
 	int white1x1RGBAIndex;
 	int max1x1RedIndex;
 
-	Shader& GetMeshShader(const Mesh& mesh);
+	Shader& GetOrCreateShader(VertexAttribute attributes, bool flatShading);
 };

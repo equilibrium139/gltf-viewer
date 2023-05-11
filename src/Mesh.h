@@ -8,16 +8,17 @@
 
 struct Submesh
 {
-	int start, countVerticesOrIndices;
+	GLuint VAO;
+	VertexAttribute flags = VertexAttribute::POSITION;
+	int countVerticesOrIndices;
 	int materialIndex;
+	bool hasIndexBuffer;
+	bool flatShading = false;
 };
 
 struct Mesh
 {
 	Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model);
 	std::vector<Submesh> submeshes;
-	GLuint VAO;
-	VertexAttribute flags = VertexAttribute::POSITION;
-	bool hasIndexBuffer;
-	bool flatShading = false;
+	bool HasMorphTargets();
 };

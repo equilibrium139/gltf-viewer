@@ -269,124 +269,116 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 {
 	assert(mesh.primitives.size() > 0);
 
-	flags = GetPrimitiveVertexLayout(mesh.primitives[0]);
-	bool hasJoints = HasFlag(flags, VertexAttribute::JOINTS);
-	bool hasMorphTargets = HasFlag(flags, VertexAttribute::MORPH_TARGET0_POSITION);
-	assert((!hasJoints && !hasMorphTargets) || (hasJoints != hasMorphTargets) && "Morph targets and skeletal animation on same mesh not supported");
-
-	bool hasMaterial = mesh.primitives[0].material >= 0;
-	bool hasNormals = HasFlag(flags, VertexAttribute::NORMAL);
-	flatShading = hasMaterial && !hasNormals;
-
-	const int vertexSizeBytes = GetVertexSizeBytes(flags);
-	hasIndexBuffer = mesh.primitives[0].indices >= 0;
-
-	// Contains vertices of all primitives of this mesh
-	std::vector<std::uint8_t> vertexBuffer;
-	std::vector<std::uint32_t> indexBuffer;
-
 	for (const tinygltf::Primitive& primitive : mesh.primitives)
 	{
 		assert(primitive.mode == GL_TRIANGLES);
 
-		// TODO: indices and material restrictions are temporary conveniences. will be removed eventually
-		assert(primitive.indices >= 0 == hasIndexBuffer && "Mesh primitives must all have indices or all not have them.");
-
-		VertexAttribute primitiveFlags = GetPrimitiveVertexLayout(primitive);
-		assert(flags == primitiveFlags && "All mesh primitives must have the same attributes");
-		assert(primitive.material >= 0 == mesh.primitives[0].material >= 0 && "Mesh primitives must all have materials or all not have them");
-
 		submeshes.emplace_back();
 		Submesh& submesh = submeshes.back();
-		std::vector<std::uint8_t> primitiveVertexBuffer = GetInterleavedVertexBuffer(primitive, primitiveFlags, model);
-		int vertexBufferBytes = vertexBuffer.size();
-		int countVertices = vertexBufferBytes / vertexSizeBytes;
-		submesh.start = countVertices;
-		int countPrimitiveVertices = primitiveVertexBuffer.size() / vertexSizeBytes;
-		submesh.countVerticesOrIndices = countPrimitiveVertices;
-		vertexBuffer.insert(vertexBuffer.end(), primitiveVertexBuffer.begin(), primitiveVertexBuffer.end());
-		submesh.materialIndex = primitive.material;
 
-		if (hasIndexBuffer)
+		submesh.flags = GetPrimitiveVertexLayout(primitive);
+		bool hasJoints = HasFlag(submesh.flags, VertexAttribute::JOINTS);
+		bool hasMorphTargets = HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET0_POSITION);
+		assert((!hasJoints && !hasMorphTargets) || (hasJoints != hasMorphTargets) && "Morph targets and skeletal animation on same mesh not supported");
+
+		submesh.materialIndex = primitive.material;
+		bool hasMaterial = submesh.materialIndex >= 0;
+		bool hasNormals = HasFlag(submesh.flags, VertexAttribute::NORMAL);
+		submesh.flatShading = hasMaterial && !hasNormals;
+
+		int primitiveVertexSizeBytes = GetVertexSizeBytes(submesh.flags);
+		std::vector<std::uint8_t> primitiveVertexBuffer = GetInterleavedVertexBuffer(primitive, submesh.flags, model);
+
+		glGenVertexArrays(1, &submesh.VAO);
+		glBindVertexArray(submesh.VAO);
+
+		GLuint VBO;
+		glGenBuffers(1, &VBO);
+		glBindBuffer(GL_ARRAY_BUFFER, VBO);
+		glBufferData(GL_ARRAY_BUFFER, primitiveVertexBuffer.size(), primitiveVertexBuffer.data(), GL_STATIC_DRAW);
+
+		// Don't change attribute indices, shaders rely on them being in this order
+
+		// Position
+		int offset = 0;
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+		offset += attributeByteSizes.find(VertexAttribute::POSITION)->second;
+
+		if (HasFlag(submesh.flags, VertexAttribute::TEXCOORD))
 		{
-			int primitiveIndicesOffset = countVertices;
-			std::vector<std::uint32_t> primitiveIndexBuffer = GetIndexBuffer(primitive, model, primitiveIndicesOffset);
-			submesh.start = indexBuffer.size();
+			glEnableVertexAttribArray(1);
+			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			offset += attributeByteSizes.find(VertexAttribute::TEXCOORD)->second;
+		}
+
+		if (HasFlag(submesh.flags, VertexAttribute::NORMAL))
+		{
+			glEnableVertexAttribArray(2);
+			glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			offset += attributeByteSizes.find(VertexAttribute::NORMAL)->second;
+		}
+
+		if (HasFlag(submesh.flags, VertexAttribute::WEIGHTS))
+		{
+			glEnableVertexAttribArray(3);
+			glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			offset += attributeByteSizes.find(VertexAttribute::WEIGHTS)->second;
+
+			glEnableVertexAttribArray(4);
+			glVertexAttribIPointer(4, 1, GL_UNSIGNED_INT, primitiveVertexSizeBytes, (const void*)offset);
+			offset += attributeByteSizes.find(VertexAttribute::JOINTS)->second;
+		}
+
+		if (HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET0_POSITION))
+		{
+			assert(HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET1_POSITION));
+			glEnableVertexAttribArray(5);
+			glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_POSITION)->second;
+
+			glEnableVertexAttribArray(6);
+			glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_POSITION)->second;
+		}
+
+		if (HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET0_NORMAL))
+		{
+			assert(HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET1_NORMAL));
+			glEnableVertexAttribArray(7);
+			glVertexAttribPointer(7, 3, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_NORMAL)->second;
+
+			glEnableVertexAttribArray(8);
+			glVertexAttribPointer(8, 3, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_NORMAL)->second;
+		}
+
+		submesh.hasIndexBuffer = primitive.indices >= 0;
+		if (submesh.hasIndexBuffer)
+		{
+			std::vector<std::uint32_t> primitiveIndexBuffer = GetIndexBuffer(primitive, model, 0);
 			submesh.countVerticesOrIndices = primitiveIndexBuffer.size();
-			indexBuffer.insert(indexBuffer.end(), primitiveIndexBuffer.begin(), primitiveIndexBuffer.end());
+			GLuint IBO;
+			glGenBuffers(1, &IBO);
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
+			glBufferData(GL_ELEMENT_ARRAY_BUFFER, primitiveIndexBuffer.size() * sizeof(primitiveIndexBuffer[0]), primitiveIndexBuffer.data(), GL_STATIC_DRAW);
+		}
+		else
+		{
+			submesh.countVerticesOrIndices = primitiveVertexBuffer.size() / primitiveVertexSizeBytes;
 		}
 	}
+}
 
-	glGenVertexArrays(1, &VAO);
-	glBindVertexArray(VAO);
-	
-	GLuint VBO;
-	glGenBuffers(1, &VBO);
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, vertexBuffer.size(), vertexBuffer.data(), GL_STATIC_DRAW);
-
-	// Don't change attribute indices, shaders rely on them being in this order
-
-	// Position
-	int offset = 0;
-	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-	offset += attributeByteSizes.find(VertexAttribute::POSITION)->second;
-
-	if (HasFlag(flags, VertexAttribute::TEXCOORD))
+bool Mesh::HasMorphTargets()
+{
+	for (Submesh& submesh : submeshes)
 	{
-		glEnableVertexAttribArray(1);
-		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += attributeByteSizes.find(VertexAttribute::TEXCOORD)->second;
+		if (HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET0_POSITION))
+		{
+			return true;
+		}
 	}
-
-	if (HasFlag(flags, VertexAttribute::NORMAL))
-	{
-		glEnableVertexAttribArray(2);
-		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += attributeByteSizes.find(VertexAttribute::NORMAL)->second;
-	}
-
-	if (HasFlag(flags, VertexAttribute::WEIGHTS))
-	{
-		glEnableVertexAttribArray(3);
-		glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += attributeByteSizes.find(VertexAttribute::WEIGHTS)->second;
-
-		glEnableVertexAttribArray(4);
-		glVertexAttribIPointer(4, 1, GL_UNSIGNED_INT, vertexSizeBytes, (const void*)offset);
-		offset += attributeByteSizes.find(VertexAttribute::JOINTS)->second;
-	}
-
-	if (HasFlag(flags, VertexAttribute::MORPH_TARGET0_POSITION))
-	{
-		assert(HasFlag(flags, VertexAttribute::MORPH_TARGET1_POSITION));
-		glEnableVertexAttribArray(5);
-		glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_POSITION)->second;
-
-		glEnableVertexAttribArray(6);
-		glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_POSITION)->second;
-	}
-
-	if (HasFlag(flags, VertexAttribute::MORPH_TARGET0_NORMAL))
-	{
-		assert(HasFlag(flags, VertexAttribute::MORPH_TARGET1_NORMAL));
-		glEnableVertexAttribArray(7);
-		glVertexAttribPointer(7, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_NORMAL)->second;
-
-		glEnableVertexAttribArray(8);
-		glVertexAttribPointer(8, 3, GL_FLOAT, GL_FALSE, vertexSizeBytes, (const void*)offset);
-		offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_NORMAL)->second;
-	}
-
-	if (hasIndexBuffer)
-	{
-		GLuint IBO;
-		glGenBuffers(1, &IBO);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexBuffer.size() * sizeof(indexBuffer[0]), indexBuffer.data(), GL_STATIC_DRAW);
-	}
+	return false;
 }

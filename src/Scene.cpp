@@ -33,7 +33,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 			entity.meshIdx = node.mesh;
 			Mesh& entityMesh = resources.meshes[entity.meshIdx];
 			// TODO: add support for more than 2 morph targets
-			bool hasMorphTargets = HasFlag(entityMesh.flags, VertexAttribute::MORPH_TARGET0_POSITION);
+			bool hasMorphTargets = entityMesh.HasMorphTargets();
 			if (hasMorphTargets)
 			{
 				entity.morphTargetWeights.resize(2);
@@ -238,33 +238,32 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 	if (entity.meshIdx >= 0)
 	{
 		Mesh& entityMesh = resources.meshes[entity.meshIdx];
-		glBindVertexArray(entityMesh.VAO);
-
-		Shader& shader = resources.GetMeshShader(entityMesh);
-		shader.use();
-		shader.SetMat4("modelView", glm::value_ptr(modelView));
-		shader.SetMat4("projection", glm::value_ptr(projection));
-		bool hasNormals = HasFlag(entityMesh.flags, VertexAttribute::NORMAL);
-		if (hasNormals)
+		for (Submesh& submesh : entityMesh.submeshes)
 		{
-			glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelView)));
-			shader.SetMat3("normalMatrixVS", glm::value_ptr(normalMatrix));
-			shader.SetVec3("pointLight.positionVS", glm::vec3(0.0f, 0.0f, 0.0f));
-			shader.SetVec3("pointLight.color", glm::vec3(0.5f, 0.5f, 0.5f));
-		}
-		if (entity.skeletonIdx >= 0)
-		{
-			auto skinningMatrices = ComputeSkinningMatrices(skeletons[entity.skeletonIdx], entities);
-			shader.SetMat4("skinningMatrices", glm::value_ptr(skinningMatrices.front()), (int)skinningMatrices.size());
-		}
-		bool hasMorphTargets = HasFlag(entityMesh.flags, VertexAttribute::MORPH_TARGET0_POSITION);
-		if (hasMorphTargets)
-		{
-			shader.SetFloat("morph1Weight", entity.morphTargetWeights[0]);
-			shader.SetFloat("morph2Weight", entity.morphTargetWeights[1]);
-		}
-		for (const Submesh& submesh : entityMesh.submeshes)
-		{
+			glBindVertexArray(submesh.VAO);
+			Shader& shader = resources.GetOrCreateShader(submesh.flags, submesh.flatShading);
+			shader.use();
+			shader.SetMat4("modelView", glm::value_ptr(modelView));
+			shader.SetMat4("projection", glm::value_ptr(projection));
+			bool hasNormals = HasFlag(submesh.flags, VertexAttribute::NORMAL);
+			if (hasNormals)
+			{
+				glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelView)));
+				shader.SetMat3("normalMatrixVS", glm::value_ptr(normalMatrix));
+				shader.SetVec3("pointLight.positionVS", glm::vec3(0.0f, 0.0f, 0.0f));
+				shader.SetVec3("pointLight.color", glm::vec3(0.5f, 0.5f, 0.5f));
+			}
+			if (entity.skeletonIdx >= 0)
+			{
+				auto skinningMatrices = ComputeSkinningMatrices(skeletons[entity.skeletonIdx], entities);
+				shader.SetMat4("skinningMatrices", glm::value_ptr(skinningMatrices.front()), (int)skinningMatrices.size());
+			}
+			bool hasMorphTargets = HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET0_POSITION);
+			if (hasMorphTargets)
+			{
+				shader.SetFloat("morph1Weight", entity.morphTargetWeights[0]);
+				shader.SetFloat("morph2Weight", entity.morphTargetWeights[1]);
+			}
 			if (submesh.materialIndex >= 0)
 			{
 				const PBRMaterial& material = resources.materials[submesh.materialIndex];
@@ -273,7 +272,7 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 				shader.SetFloat("material.roughnessFactor", material.roughnessFactor);
 				shader.SetFloat("material.occlusionStrength", material.occlusionStrength);
 
-				bool hasTextureCoords = HasFlag(entityMesh.flags, VertexAttribute::TEXCOORD);
+				bool hasTextureCoords = HasFlag(submesh.flags, VertexAttribute::TEXCOORD);
 
 				if (hasTextureCoords)
 				{
@@ -303,13 +302,13 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 					textureUnit++;
 				}
 			}
-			if (entityMesh.hasIndexBuffer)
+			if (submesh.hasIndexBuffer)
 			{
-				glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, (const void*)(submesh.start * sizeof(std::uint32_t)));
+				glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, nullptr);
 			}
 			else
 			{
-				glDrawArrays(GL_TRIANGLES, submesh.start, submesh.countVerticesOrIndices);
+				glDrawArrays(GL_TRIANGLES, 0, submesh.countVerticesOrIndices);
 			}
 		}
 	}

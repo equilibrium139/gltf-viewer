@@ -54,7 +54,7 @@ void main()
     surfaceNormalVS = aBaseNormal;
 #endif // HAS_NORMALS
 
-    mat4 skinningMatrix = mat4(1.0);
+    mat4 skinningMatrix = mat4(1.0); // TODO: move this into ifdef?
 
 // TODO: make sure skeletal animation is independent of morph target animation
 #ifdef HAS_JOINTS

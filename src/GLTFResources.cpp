@@ -5,11 +5,9 @@
 #include <tuple>
 #include <vector>
 
-static std::vector<std::string> GetShaderDefines(const Mesh& mesh)
+static std::vector<std::string> GetShaderDefines(VertexAttribute flags, bool flatShading)
 {
 	std::vector<std::string> defines;
-
-	const auto flags = mesh.flags;
 
 	if (HasFlag(flags, VertexAttribute::TEXCOORD))
 	{
@@ -27,7 +25,7 @@ static std::vector<std::string> GetShaderDefines(const Mesh& mesh)
 	{
 		defines.emplace_back("HAS_MORPH_TARGETS");
 	}
-	if (mesh.flatShading)
+	if (flatShading)
 	{
 		defines.emplace_back("FLAT_SHADING");
 	}
@@ -41,15 +39,6 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 	for (const tinygltf::Mesh& mesh : model.meshes)
 	{
 		meshes.emplace_back(mesh, model);
-
-		auto& addedMesh = meshes.back();
-
-		// TODO: make shaders depend on materials as well
-		if (!shaders.contains(addedMesh.flags))
-		{
-			auto defines = GetShaderDefines(addedMesh);
-			shaders.insert_or_assign(addedMesh.flags, Shader("Shaders/default.vert", "Shaders/default.frag", nullptr, {}, defines));
-		}
 	}
 
 	for (const tinygltf::Texture& texture : model.textures)
@@ -100,9 +89,17 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 	}
 }
 
-Shader& GLTFResources::GetMeshShader(const Mesh& mesh)
+Shader& GLTFResources::GetOrCreateShader(VertexAttribute attributes, bool flatShading)
 {
-	auto iter = shaders.find(mesh.flags);
-	assert(iter != shaders.end() && "No shader found for mesh");
-	return iter->second;
+	for (auto& pair : shaders)
+	{
+		const ShaderKey& key = pair.first;
+		if (key.first == attributes && key.second == flatShading)
+		{
+			return pair.second;
+		}
+	}
+	auto defines = GetShaderDefines(attributes, flatShading);
+	shaders.push_back({ { attributes, flatShading }, Shader("Shaders/default.vert", "Shaders/default.frag", nullptr, {}, defines) });
+	return shaders.back().second;
 }
