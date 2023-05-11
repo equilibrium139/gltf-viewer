@@ -332,12 +332,41 @@ void Scene::RenderUI()
 	}
 
 	ImGui::End();
+
+	Entity* selectedEntity = nullptr;
+	for (Entity& entity : entities)
+	{
+		if (entity.name == selectedEntityName)
+		{
+			selectedEntity = &entity;
+			break;
+		}
+	}
+	if (selectedEntity != nullptr)
+	{
+		ImGui::Begin("Transform");
+
+		ImGui::DragFloat3("Translation", &selectedEntity->transform.translation.x, 0.1f);
+		ImGui::DragFloat4("Rotation(quat)", &selectedEntity->transform.rotation.x);
+		ImGui::DragFloat3("Scale", &selectedEntity->transform.scale.x);
+
+		ImGui::End();
+	}
 }
 
 void Scene::RenderSceneHierarchy(const Entity& entity)
 {
-	if (ImGui::TreeNode(entity.name.c_str()))
+	ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow;
+	if (entity.name == selectedEntityName)
 	{
+		flags |= ImGuiTreeNodeFlags_Selected;
+	}
+	if (ImGui::TreeNodeEx(entity.name.c_str(), flags))
+	{
+		if (ImGui::IsItemClicked())
+		{
+			selectedEntityName = entity.name;
+		}
 		for (int childIndex : entity.children)
 		{
 			const Entity& child = entities[childIndex];
@@ -347,5 +376,11 @@ void Scene::RenderSceneHierarchy(const Entity& entity)
 
 		ImGui::TreePop();
 	}
-
+	else
+	{
+		if (ImGui::IsItemClicked())
+		{
+			selectedEntityName = entity.name;
+		}
+	}
 }

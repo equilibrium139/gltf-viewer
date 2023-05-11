@@ -26,4 +26,5 @@ private:
 	std::vector<Entity> entities;
 	std::vector<Skeleton> skeletons;
 	GLTFResources resources;
+	std::string selectedEntityName;
 };
