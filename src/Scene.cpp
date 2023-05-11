@@ -217,18 +217,21 @@ void Scene::UpdateAndRender(const Input& input)
 
 	time += input.deltaTime;
 
-	const auto& anim = animations[currentAnimationIdx];
-	
-	float normalizedTime = std::fmod(time, anim.durationSeconds);
-
-	for (const auto& entityAnim : anim.entityAnimations)
+	if (currentAnimationIdx < animations.size())
 	{
-		Entity& entity = entities[entityAnim.entityIdx];
+		const auto& anim = animations[currentAnimationIdx];
 
-		if (entityAnim.translations.values.size() > 0) entity.transform.translation = SampleAt(entityAnim.translations, normalizedTime);
-		if (entityAnim.scales.values.size() > 0) entity.transform.scale = SampleAt(entityAnim.scales, normalizedTime);
-		if (entityAnim.rotations.values.size() > 0) entity.transform.rotation = SampleAt(entityAnim.rotations, normalizedTime);
-		if (entityAnim.weights.values.size() > 0) entity.morphTargetWeights = SampleWeightsAt(entityAnim.weights, normalizedTime);
+		float normalizedTime = std::fmod(time, anim.durationSeconds);
+
+		for (const auto& entityAnim : anim.entityAnimations)
+		{
+			Entity& entity = entities[entityAnim.entityIdx];
+
+			if (entityAnim.translations.values.size() > 0) entity.transform.translation = SampleAt(entityAnim.translations, normalizedTime);
+			if (entityAnim.scales.values.size() > 0) entity.transform.scale = SampleAt(entityAnim.scales, normalizedTime);
+			if (entityAnim.rotations.values.size() > 0) entity.transform.rotation = SampleAt(entityAnim.rotations, normalizedTime);
+			if (entityAnim.weights.values.size() > 0) entity.morphTargetWeights = SampleWeightsAt(entityAnim.weights, normalizedTime);
+		}
 	}
 
 	RenderUI();
@@ -362,30 +365,33 @@ void Scene::RenderUI()
 		ImGui::End();
 	}
 
-	ImGui::Begin("Animations");
-	
-	const char* currentAnimName = animations[currentAnimationIdx].name.c_str();
-	if (ImGui::BeginCombo("Animation", currentAnimName))
+	if (!animations.empty())
 	{
-		for (int i = 0; i < animations.size(); i++)
+		ImGui::Begin("Animations");
+
+		const char* currentAnimName = animations[currentAnimationIdx].name.c_str();
+		if (ImGui::BeginCombo("Animation", currentAnimName))
 		{
-			const bool is_selected = (currentAnimationIdx == i);
-			if (ImGui::Selectable(animations[i].name.c_str(), is_selected))
+			for (int i = 0; i < animations.size(); i++)
 			{
-				currentAnimationIdx = i;
+				const bool is_selected = (currentAnimationIdx == i);
+				if (ImGui::Selectable(animations[i].name.c_str(), is_selected))
+				{
+					currentAnimationIdx = i;
+				}
+
+				// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+				if (is_selected)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
 			}
 
-			// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-			if (is_selected)
-			{
-				ImGui::SetItemDefaultFocus();
-			}
+			ImGui::EndCombo();
 		}
 
-		ImGui::EndCombo();
+		ImGui::End();
 	}
-
-	ImGui::End();
 }
 
 void Scene::RenderSceneHierarchy(const Entity& entity)
