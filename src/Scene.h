@@ -27,4 +27,5 @@ private:
 	std::vector<Skeleton> skeletons;
 	GLTFResources resources;
 	std::string selectedEntityName;
+	int currentAnimationIdx = 0;
 };

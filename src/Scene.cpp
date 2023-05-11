@@ -95,6 +95,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 		}
 	}
 
+	int defaultAnimationNameSuffix = 0;
 	// Animations
 	for (const auto& gltfAnimation : model.animations)
 	{
@@ -103,6 +104,15 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 
 		double animationDurationSeconds = GetAnimationDurationSeconds(gltfAnimation, model);
 		animation.durationSeconds = (float)animationDurationSeconds;
+
+		if (gltfAnimation.name.empty())
+		{
+			animation.name = "Anim " + std::to_string(defaultAnimationNameSuffix++);
+		}
+		else
+		{
+			animation.name = gltfAnimation.name;
+		}
 			
 		for (const auto& channel : gltfAnimation.channels)
 		{
@@ -206,20 +216,19 @@ void Scene::UpdateAndRender(const Input& input)
 	if (input.leftMousePressed) camera.ProcessMouseMovement(input.mouseDeltaX, input.mouseDeltaY);
 
 	time += input.deltaTime;
+
+	const auto& anim = animations[currentAnimationIdx];
 	
-	for (const auto& anim : animations)
+	float normalizedTime = std::fmod(time, anim.durationSeconds);
+
+	for (const auto& entityAnim : anim.entityAnimations)
 	{
-		float normalizedTime = std::fmod(time, anim.durationSeconds);
+		Entity& entity = entities[entityAnim.entityIdx];
 
-		for (const auto& entityAnim : anim.entityAnimations)
-		{
-			Entity& entity = entities[entityAnim.entityIdx];
-
-			if (entityAnim.translations.values.size() > 0) entity.transform.translation = SampleAt(entityAnim.translations, normalizedTime);
-			if (entityAnim.scales.values.size() > 0) entity.transform.scale = SampleAt(entityAnim.scales, normalizedTime);
-			if (entityAnim.rotations.values.size() > 0) entity.transform.rotation = SampleAt(entityAnim.rotations, normalizedTime);
-			if (entityAnim.weights.values.size() > 0) entity.morphTargetWeights = SampleWeightsAt(entityAnim.weights, normalizedTime);
-		}
+		if (entityAnim.translations.values.size() > 0) entity.transform.translation = SampleAt(entityAnim.translations, normalizedTime);
+		if (entityAnim.scales.values.size() > 0) entity.transform.scale = SampleAt(entityAnim.scales, normalizedTime);
+		if (entityAnim.rotations.values.size() > 0) entity.transform.rotation = SampleAt(entityAnim.rotations, normalizedTime);
+		if (entityAnim.weights.values.size() > 0) entity.morphTargetWeights = SampleWeightsAt(entityAnim.weights, normalizedTime);
 	}
 
 	RenderUI();
@@ -348,10 +357,35 @@ void Scene::RenderUI()
 
 		ImGui::DragFloat3("Translation", &selectedEntity->transform.translation.x, 0.1f);
 		ImGui::DragFloat4("Rotation(quat)", &selectedEntity->transform.rotation.x);
-		ImGui::DragFloat3("Scale", &selectedEntity->transform.scale.x);
+		ImGui::DragFloat3("Scale", &selectedEntity->transform.scale.x, 0.1f);
 
 		ImGui::End();
 	}
+
+	ImGui::Begin("Animations");
+	
+	const char* currentAnimName = animations[currentAnimationIdx].name.c_str();
+	if (ImGui::BeginCombo("Animation", currentAnimName))
+	{
+		for (int i = 0; i < animations.size(); i++)
+		{
+			const bool is_selected = (currentAnimationIdx == i);
+			if (ImGui::Selectable(animations[i].name.c_str(), is_selected))
+			{
+				currentAnimationIdx = i;
+			}
+
+			// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+			if (is_selected)
+			{
+				ImGui::SetItemDefaultFocus();
+			}
+		}
+
+		ImGui::EndCombo();
+	}
+
+	ImGui::End();
 }
 
 void Scene::RenderSceneHierarchy(const Entity& entity)

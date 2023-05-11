@@ -39,6 +39,7 @@ struct Animation
 {
 	std::vector<EntityAnimation> entityAnimations;
 	float durationSeconds;
+	std::string name;
 };
 
 double GetAnimationDurationSeconds(const tinygltf::Animation& animation, const tinygltf::Model& model);
