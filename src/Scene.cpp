@@ -239,6 +239,8 @@ void Scene::Render(float aspectRatio)
 	{
 		if (entity.parent < 0) RenderEntity(entity, glm::mat4(1.0f), view, projection);
 	}
+
+	RenderBoundingBox(sceneBoundingBox, projection * view);
 }
 
 void Scene::UpdateAndRender(const Input& input)
@@ -359,18 +361,16 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 			}
 		}
 
-		// Render bounding box
-		BBox& meshBBox = entityMesh.boundingBox;
-		glm::vec3 dimensions = meshBBox.maxXYZ - meshBBox.minXYZ;
-		glm::vec3 midpoint = meshBBox.minXYZ + dimensions * 0.5f;
-		glm::mat4 cubeToMesh = glm::identity<glm::mat4>();
-		cubeToMesh = glm::translate(cubeToMesh, midpoint);
-		cubeToMesh = glm::scale(cubeToMesh, dimensions);
-		glm::mat4 mvp = projection * modelView * cubeToMesh;
-		glBindVertexArray(boundingBoxVAO);
-		boundingBoxShader.use();
-		boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
-		glDrawElements(GL_LINES, 24, GL_UNSIGNED_SHORT, 0);
+		RenderBoundingBox(entityMesh.boundingBox, projection * modelView);
+
+		auto bboxWorldPoints = entityMesh.boundingBox.GetPoints();
+		auto globalTransform3x3 = glm::mat3(globalTransform);
+		for (glm::vec3& point : bboxWorldPoints)
+		{
+			point = globalTransform3x3 * point;
+			sceneBoundingBox.minXYZ = glm::min(point, sceneBoundingBox.minXYZ);
+			sceneBoundingBox.maxXYZ = glm::max(point, sceneBoundingBox.maxXYZ);
+		}
 	}
 
 	for (int childIndex : entity.children)
@@ -387,7 +387,7 @@ void Scene::RenderUI()
 	{
 		if (entities[i].parent < 0)
 		{
-			RenderSceneHierarchy(entities[i]);
+			RenderHierarchyUI(entities[i]);
 		}
 	}
 
@@ -442,7 +442,7 @@ void Scene::RenderUI()
 	}
 }
 
-void Scene::RenderSceneHierarchy(const Entity& entity)
+void Scene::RenderHierarchyUI(const Entity& entity)
 {
 	ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow;
 	if (entity.name == selectedEntityName)
@@ -459,7 +459,7 @@ void Scene::RenderSceneHierarchy(const Entity& entity)
 		{
 			const Entity& child = entities[childIndex];
 
-			RenderSceneHierarchy(child);
+			RenderHierarchyUI(child);
 		}
 
 		ImGui::TreePop();
@@ -471,4 +471,18 @@ void Scene::RenderSceneHierarchy(const Entity& entity)
 			selectedEntityName = entity.name;
 		}
 	}
+}
+
+void Scene::RenderBoundingBox(const BBox& bbox, const glm::mat4& mvp)
+{
+	glm::vec3 dimensions = bbox.maxXYZ - bbox.minXYZ;
+	glm::vec3 midpoint = bbox.minXYZ + dimensions * 0.5f;
+	glm::mat4 cubeToBBox = glm::identity<glm::mat4>();
+	cubeToBBox = glm::translate(cubeToBBox, midpoint);
+	cubeToBBox = glm::scale(cubeToBBox, dimensions);
+	glm::mat4 mat = mvp * cubeToBBox;
+	glBindVertexArray(boundingBoxVAO);
+	boundingBoxShader.use();
+	boundingBoxShader.SetMat4("mvp", glm::value_ptr(mat));
+	glDrawElements(GL_LINES, 24, GL_UNSIGNED_SHORT, 0);
 }
