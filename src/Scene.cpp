@@ -8,6 +8,41 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 	:resources(model)
 {
 	assert(model.scenes.size() == 1); // for now
+	// TODO: clean this up
+	GLfloat vertices[] = {
+		// Outline vertices
+		-0.5f, -0.5f, -0.5f,  // Vertex 0
+		 0.5f, -0.5f, -0.5f,  // Vertex 1
+		 0.5f, -0.5f,  0.5f,  // Vertex 2
+		-0.5f, -0.5f,  0.5f,  // Vertex 3
+		-0.5f,  0.5f, -0.5f,  // Vertex 4
+		 0.5f,  0.5f, -0.5f,  // Vertex 5
+		 0.5f,  0.5f,  0.5f,  // Vertex 6
+		-0.5f,  0.5f,  0.5f   // Vertex 7
+	};
+
+	GLushort indices[] = {
+		// Outline edges
+		0, 1, 1, 2, 2, 3, 3, 0,  // Bottom face
+		4, 5, 5, 6, 6, 7, 7, 4,  // Top face
+		0, 4, 1, 5, 2, 6, 3, 7   // Vertical edges
+	};
+
+	glGenVertexArrays(1, &boundingBoxVAO);
+	glBindVertexArray(boundingBoxVAO);
+
+	GLuint boundingBoxVBO;
+	glGenBuffers(1, &boundingBoxVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, boundingBoxVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12, 0);
+
+	GLuint boundingBoxIBO;
+	glGenBuffers(1, &boundingBoxIBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, boundingBoxIBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
 	camera.position.z = 5.0f;
 
@@ -323,6 +358,19 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 				glDrawArrays(GL_TRIANGLES, 0, submesh.countVerticesOrIndices);
 			}
 		}
+
+		// Render bounding box
+		BBox& meshBBox = entityMesh.boundingBox;
+		glm::vec3 dimensions = meshBBox.maxXYZ - meshBBox.minXYZ;
+		glm::vec3 midpoint = meshBBox.minXYZ + dimensions * 0.5f;
+		glm::mat4 cubeToMesh = glm::identity<glm::mat4>();
+		cubeToMesh = glm::translate(cubeToMesh, midpoint);
+		cubeToMesh = glm::scale(cubeToMesh, dimensions);
+		glm::mat4 mvp = projection * modelView * cubeToMesh;
+		glBindVertexArray(boundingBoxVAO);
+		boundingBoxShader.use();
+		boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+		glDrawElements(GL_LINES, 24, GL_UNSIGNED_SHORT, 0);
 	}
 
 	for (int childIndex : entity.children)

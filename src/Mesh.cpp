@@ -264,6 +264,29 @@ static std::vector<std::uint32_t> GetIndexBuffer(const tinygltf::Primitive& prim
 	return indexBuffer;
 }
 
+static BBox ComputeBoundingBox(const std::vector<std::uint8_t>& vertexBuffer, int stride)
+{
+	// assumes positions are at offset 0
+	BBox bbox{
+		.minXYZ = glm::vec3(FLT_MAX, FLT_MAX, FLT_MAX),
+		.maxXYZ = glm::vec3(FLT_MIN, FLT_MIN, FLT_MIN)
+	};
+
+	const std::uint8_t* vertexBufferPtr = vertexBuffer.data();
+	const std::uint8_t* vertexBufferPtrEnd = vertexBuffer.data() + vertexBuffer.size();
+	while (vertexBufferPtr < vertexBufferPtrEnd)
+	{
+		const glm::vec3* pos = reinterpret_cast<const glm::vec3*>(vertexBufferPtr);
+
+		bbox.minXYZ = glm::min(*pos, bbox.minXYZ);
+		bbox.maxXYZ = glm::max(*pos, bbox.maxXYZ);
+
+		vertexBufferPtr += stride;
+	}
+
+	return bbox;
+}
+
 // Create one interleaved vertex buffer that contains the vertices of all the mesh's primitives
 Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 {
@@ -286,8 +309,13 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 		bool hasNormals = HasFlag(submesh.flags, VertexAttribute::NORMAL);
 		submesh.flatShading = hasMaterial && !hasNormals;
 
-		int primitiveVertexSizeBytes = GetVertexSizeBytes(submesh.flags);
-		std::vector<std::uint8_t> primitiveVertexBuffer = GetInterleavedVertexBuffer(primitive, submesh.flags, model);
+		int submeshVertexSizeBytes = GetVertexSizeBytes(submesh.flags);
+		std::vector<std::uint8_t> submeshVertexBuffer = GetInterleavedVertexBuffer(primitive, submesh.flags, model);
+
+		BBox submeshBoundingBox = ComputeBoundingBox(submeshVertexBuffer, submeshVertexSizeBytes);
+	
+		boundingBox.minXYZ = glm::min(submeshBoundingBox.minXYZ, boundingBox.minXYZ);
+		boundingBox.maxXYZ = glm::max(submeshBoundingBox.maxXYZ, boundingBox.maxXYZ);
 
 		glGenVertexArrays(1, &submesh.VAO);
 		glBindVertexArray(submesh.VAO);
@@ -295,38 +323,38 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 		GLuint VBO;
 		glGenBuffers(1, &VBO);
 		glBindBuffer(GL_ARRAY_BUFFER, VBO);
-		glBufferData(GL_ARRAY_BUFFER, primitiveVertexBuffer.size(), primitiveVertexBuffer.data(), GL_STATIC_DRAW);
+		glBufferData(GL_ARRAY_BUFFER, submeshVertexBuffer.size(), submeshVertexBuffer.data(), GL_STATIC_DRAW);
 
 		// Don't change attribute indices, shaders rely on them being in this order
 
 		// Position
 		int offset = 0;
 		glEnableVertexAttribArray(0);
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
 		offset += attributeByteSizes.find(VertexAttribute::POSITION)->second;
 
 		if (HasFlag(submesh.flags, VertexAttribute::TEXCOORD))
 		{
 			glEnableVertexAttribArray(1);
-			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
 			offset += attributeByteSizes.find(VertexAttribute::TEXCOORD)->second;
 		}
 
 		if (HasFlag(submesh.flags, VertexAttribute::NORMAL))
 		{
 			glEnableVertexAttribArray(2);
-			glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
 			offset += attributeByteSizes.find(VertexAttribute::NORMAL)->second;
 		}
 
 		if (HasFlag(submesh.flags, VertexAttribute::WEIGHTS))
 		{
 			glEnableVertexAttribArray(3);
-			glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
 			offset += attributeByteSizes.find(VertexAttribute::WEIGHTS)->second;
 
 			glEnableVertexAttribArray(4);
-			glVertexAttribIPointer(4, 1, GL_UNSIGNED_INT, primitiveVertexSizeBytes, (const void*)offset);
+			glVertexAttribIPointer(4, 1, GL_UNSIGNED_INT, submeshVertexSizeBytes, (const void*)offset);
 			offset += attributeByteSizes.find(VertexAttribute::JOINTS)->second;
 		}
 
@@ -334,11 +362,11 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 		{
 			assert(HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET1_POSITION));
 			glEnableVertexAttribArray(5);
-			glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			glVertexAttribPointer(5, 3, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
 			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_POSITION)->second;
 
 			glEnableVertexAttribArray(6);
-			glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			glVertexAttribPointer(6, 3, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
 			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_POSITION)->second;
 		}
 
@@ -346,11 +374,11 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 		{
 			assert(HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET1_NORMAL));
 			glEnableVertexAttribArray(7);
-			glVertexAttribPointer(7, 3, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			glVertexAttribPointer(7, 3, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
 			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_NORMAL)->second;
 
 			glEnableVertexAttribArray(8);
-			glVertexAttribPointer(8, 3, GL_FLOAT, GL_FALSE, primitiveVertexSizeBytes, (const void*)offset);
+			glVertexAttribPointer(8, 3, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
 			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_NORMAL)->second;
 		}
 
@@ -366,7 +394,7 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 		}
 		else
 		{
-			submesh.countVerticesOrIndices = primitiveVertexBuffer.size() / primitiveVertexSizeBytes;
+			submesh.countVerticesOrIndices = submeshVertexBuffer.size() / submeshVertexSizeBytes;
 		}
 	}
 }

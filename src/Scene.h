@@ -28,4 +28,6 @@ private:
 	GLTFResources resources;
 	std::string selectedEntityName;
 	int currentAnimationIdx = 0;
+	GLuint boundingBoxVAO;
+	Shader boundingBoxShader = Shader("Shaders/bbox.vert", "Shaders/bbox.frag");
 };

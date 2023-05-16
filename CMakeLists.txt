@@ -10,6 +10,7 @@ add_executable(gltf-viewer
 src/Main.cpp
 src/Animation.cpp
 src/Animation.h
+src/BBox.h
 src/Camera.h
 src/Entity.h
 src/GLTFHelpers.h
