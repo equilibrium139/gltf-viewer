@@ -124,8 +124,9 @@ public:
         front = glm::normalize(pos - this->position);
         pitch = glm::degrees(asin(front.y));
         yaw = glm::degrees(atan2(front.z, front.x));
-        right = glm::normalize(glm::cross(front, worldUp));
-        up = glm::normalize(glm::cross(right, front));
+        updateCameraVectors();
+        /*right = glm::normalize(glm::cross(front, worldUp));
+        up = glm::normalize(glm::cross(right, front));*/
     }
 
 private:

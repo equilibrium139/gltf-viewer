@@ -242,9 +242,60 @@ void Scene::Render(float aspectRatio)
 	if (firstFrame)
 	{
 		glm::vec3 dims = sceneBoundingBox.maxXYZ - sceneBoundingBox.minXYZ;
-		camera.position = sceneBoundingBox.maxXYZ + glm::vec3(dims.x, 2 * dims.y, dims.z);
 		glm::vec3 center = sceneBoundingBox.GetCenter();
+		glm::vec3 offsetFromCenter(0.0f);
+		float maxDim = std::max({ dims.x, dims.y, dims.z });
+		if (dims.x < dims.y)
+		{
+			if (dims.x < dims.z)
+			{
+				offsetFromCenter.x = maxDim;
+			}
+			else
+			{
+				offsetFromCenter.z = maxDim;
+			}
+		}
+		else
+		{
+			if (dims.y < dims.z)
+			{
+				offsetFromCenter.y = maxDim;
+			}
+			else
+			{
+				offsetFromCenter.z = maxDim;
+			}
+		}
+		camera.position = center + offsetFromCenter;
 		camera.LookAt(center);
+		auto bboxPoints = sceneBoundingBox.GetPoints();
+		while (true)
+		{
+			glm::mat4 mvp = camera.GetProjectionMatrix(aspectRatio) * camera.GetViewMatrix();
+			bool allPointsInCamView = true;
+			for (const glm::vec3& point : bboxPoints)
+			{
+				glm::vec4 clipSpacePoint = mvp * glm::vec4(point, 1.0f);
+				glm::vec3 ndcPoint(clipSpacePoint.x / clipSpacePoint.w, clipSpacePoint.y / clipSpacePoint.w, clipSpacePoint.z / clipSpacePoint.w);
+				if (ndcPoint.x < -1.0f || ndcPoint.x > 1.0f ||
+					ndcPoint.y < -1.0f || ndcPoint.y > 1.0f)
+				{
+					allPointsInCamView = false;
+					break;
+				}
+			}
+			if (allPointsInCamView)
+			{
+				break;
+			}
+			else
+			{
+				offsetFromCenter *= 1.5f;
+				camera.position = center + offsetFromCenter;
+			}
+		}
+		camera.movementSpeed = maxDim / 10.0f;
 		firstFrame = false;
 	}
 }
