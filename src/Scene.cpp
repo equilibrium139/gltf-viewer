@@ -44,8 +44,6 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, boundingBoxIBO);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-	camera.position.z = 5.0f;
-
 	int defaultEntityNameSuffix = 0;
 	
 	// Nodes
@@ -241,6 +239,14 @@ void Scene::Render(float aspectRatio)
 	}
 
 	RenderBoundingBox(sceneBoundingBox, projection * view);
+	if (firstFrame)
+	{
+		glm::vec3 dims = sceneBoundingBox.maxXYZ - sceneBoundingBox.minXYZ;
+		camera.position = sceneBoundingBox.maxXYZ + glm::vec3(dims.x, 2 * dims.y, dims.z);
+		glm::vec3 center = sceneBoundingBox.GetCenter();
+		camera.LookAt(center);
+		firstFrame = false;
+	}
 }
 
 void Scene::UpdateAndRender(const Input& input)

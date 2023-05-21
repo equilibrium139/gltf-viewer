@@ -119,6 +119,15 @@ public:
             zoom = 45.0f;
     }
 
+    void LookAt(glm::vec3 pos)
+    {
+        front = glm::normalize(pos - this->position);
+        pitch = glm::degrees(asin(front.y));
+        yaw = glm::degrees(atan2(front.z, front.x));
+        right = glm::normalize(glm::cross(front, worldUp));
+        up = glm::normalize(glm::cross(right, front));
+    }
+
 private:
     // calculates the front vector from the Camera's (updated) Euler Angles
     void updateCameraVectors()

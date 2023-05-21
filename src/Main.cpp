@@ -13,12 +13,25 @@
 
 int windowWidth = 1920;
 int windowHeight = 1080;
+int selectedModelIndex = 0;
 
 void FramebufferSizeCallback(GLFWwindow*, int width, int height)
 {
     glViewport(0, 0, width, height);
     windowWidth = width;
     windowHeight = height;
+}
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    if (key == GLFW_KEY_N && action == GLFW_PRESS)
+    {
+        selectedModelIndex++;
+    }
+    if (key == GLFW_KEY_P && action == GLFW_PRESS)
+    {
+        selectedModelIndex--;
+    }
 }
 
 void ProcessInput(GLFWwindow* window, Input& outInput, const ImGuiIO& io)
@@ -137,6 +150,7 @@ int main(int argc, char** argv)
 
     glViewport(0, 0, windowWidth, windowHeight);
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
+    glfwSetKeyCallback(window, key_callback);
 
     glEnable(GL_DEPTH_TEST);
 
@@ -173,8 +187,7 @@ int main(int argc, char** argv)
     float previousFrameTime = 0.0f;
     float currentFrameTime = 0.0f;
 
-    int selectedModelIndex = 3;
-    while (sampleModelNames[selectedModelIndex] != "BrainStem")
+    while (sampleModelNames[selectedModelIndex] != "ABeautifulGame")
     {
         selectedModelIndex++;
     }
@@ -205,15 +218,6 @@ int main(int argc, char** argv)
                 if (ImGui::Selectable(sampleModelNames[n].c_str(), is_selected))
                 {
                     selectedModelIndex = n;
-                    auto sceneIter = sampleModels.find(sampleModelNames[selectedModelIndex]);
-                    if (sceneIter != sampleModels.end())
-                    {
-                        selectedScene = &sceneIter->second;
-                    }
-                    else
-                    {
-                        selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels);
-                    }
                 }
 
                 // Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
@@ -233,6 +237,16 @@ int main(int argc, char** argv)
         glViewport(0, 0, display_w, display_h);
         glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        auto sceneIter = sampleModels.find(sampleModelNames[selectedModelIndex]);
+        if (sceneIter != sampleModels.end())
+        {
+            selectedScene = &sceneIter->second;
+        }
+        else
+        {
+            selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels);
+        }
 
         if (selectedScene)
         {

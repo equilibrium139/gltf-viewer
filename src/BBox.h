@@ -5,12 +5,16 @@
 struct BBox
 {
 	glm::vec3 minXYZ, maxXYZ;
-	std::array<glm::vec3, 8> GetPoints()
+	std::array<glm::vec3, 8> GetPoints() const
 	{
 		glm::vec3 dims = maxXYZ - minXYZ;
 		return {
 			minXYZ, minXYZ + glm::vec3(dims.x, 0.0f, 0.0f), minXYZ + glm::vec3(0.0f, 0.0f, dims.z), minXYZ + glm::vec3(dims.x, 0.0f, dims.z),
 			maxXYZ, maxXYZ - glm::vec3(dims.x, 0.0f, 0.0f), maxXYZ - glm::vec3(0.0f, 0.0f, dims.z), maxXYZ - glm::vec3(dims.x, 0.0f, dims.z)
 		};
+	}
+	glm::vec3 GetCenter() const
+	{
+		return minXYZ + (maxXYZ - minXYZ) * 0.5f;
 	}
 };

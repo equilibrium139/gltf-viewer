@@ -31,5 +31,9 @@ private:
 	int currentAnimationIdx = 0;
 	GLuint boundingBoxVAO;
 	Shader boundingBoxShader = Shader("Shaders/bbox.vert", "Shaders/bbox.frag");
-	BBox sceneBoundingBox;
+	BBox sceneBoundingBox = {
+		.minXYZ = glm::vec3(FLT_MAX),
+		.maxXYZ = glm::vec3(FLT_MIN),
+	};
+	bool firstFrame = true;
 };
