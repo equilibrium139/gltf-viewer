@@ -30,6 +30,7 @@ const float FAR = 1000.0f;
 class Camera
 {
 public:
+    std::string name;
     // camera Attributes
     glm::vec3 position;
     glm::vec3 front;
@@ -125,6 +126,7 @@ public:
         pitch = glm::degrees(asin(front.y));
         yaw = glm::degrees(atan2(front.z, front.x));
         updateCameraVectors();
+        // TODO: Investigate
         /*right = glm::normalize(glm::cross(front, worldUp));
         up = glm::normalize(glm::cross(right, front));*/
     }

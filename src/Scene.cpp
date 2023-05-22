@@ -11,14 +11,14 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 	// TODO: clean this up
 	GLfloat vertices[] = {
 		// Outline vertices
-		-0.5f, -0.5f, -0.5f,  // Vertex 0
-		 0.5f, -0.5f, -0.5f,  // Vertex 1
-		 0.5f, -0.5f,  0.5f,  // Vertex 2
-		-0.5f, -0.5f,  0.5f,  // Vertex 3
-		-0.5f,  0.5f, -0.5f,  // Vertex 4
-		 0.5f,  0.5f, -0.5f,  // Vertex 5
-		 0.5f,  0.5f,  0.5f,  // Vertex 6
-		-0.5f,  0.5f,  0.5f   // Vertex 7
+		-0.5f, -0.5f, -0.5f, 
+		 0.5f, -0.5f, -0.5f, 
+		 0.5f, -0.5f,  0.5f, 
+		-0.5f, -0.5f,  0.5f, 
+		-0.5f,  0.5f, -0.5f, 
+		 0.5f,  0.5f, -0.5f, 
+		 0.5f,  0.5f,  0.5f, 
+		-0.5f,  0.5f,  0.5f  
 	};
 
 	GLushort indices[] = {
@@ -60,7 +60,6 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 		entity.transform = GetNodeTransform(node);
 		entity.children = node.children;
 
-		// TODO: add support for cameras
 		if (node.mesh >= 0)
 		{
 			entity.meshIdx = node.mesh;
@@ -71,6 +70,11 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 			{
 				entity.morphTargetWeights.resize(2);
 			}
+		}
+
+		if (node.camera >= 0) 
+		{
+			entity.cameraIdx = node.camera;
 		}
 	}
 
@@ -227,18 +231,48 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 			}
 		}
 	}
+
+	controllableCamera.name = "Controllable Camera";
+	int defaultCameraNameSuffix = 0;
+	for (const tinygltf::Camera& gltfCamera : model.cameras)
+	{
+		bool perspective = gltfCamera.type == "perspective";
+		if (!perspective)
+		{
+			std::cout << "Warning: Orthographic cameras not currently supported\n";
+		}
+		cameras.emplace_back();
+		Camera& camera = cameras.back();
+		if (!gltfCamera.name.empty())
+		{
+			camera.name = gltfCamera.name;
+		}
+		else
+		{
+			camera.name = "Camera " + std::to_string(defaultCameraNameSuffix++);
+		}
+		// TODO: handle gltf camera aspect ratio
+		if (perspective)
+		{
+			camera.zoom = glm::degrees(gltfCamera.perspective.yfov);
+			camera.near = gltfCamera.perspective.znear;
+			camera.far = gltfCamera.perspective.zfar;
+		}
+	}
 }
 
 void Scene::Render(float aspectRatio)
 {
-	const auto view = camera.GetViewMatrix();
-	const auto projection = camera.GetProjectionMatrix(aspectRatio);
+	const auto view = currentCamera->GetViewMatrix();
+	const auto projection = currentCamera->GetProjectionMatrix(aspectRatio);
 	for (const Entity& entity : entities)
 	{
 		if (entity.parent < 0) RenderEntity(entity, glm::mat4(1.0f), view, projection);
 	}
 
 	RenderBoundingBox(sceneBoundingBox, projection * view);
+
+	// Position controllable camera according to scene bounding box
 	if (firstFrame)
 	{
 		glm::vec3 dims = sceneBoundingBox.maxXYZ - sceneBoundingBox.minXYZ;
@@ -267,12 +301,12 @@ void Scene::Render(float aspectRatio)
 				offsetFromCenter.z = maxDim;
 			}
 		}
-		camera.position = center + offsetFromCenter;
-		camera.LookAt(center);
+		controllableCamera.position = center + offsetFromCenter;
+		controllableCamera.LookAt(center);
 		auto bboxPoints = sceneBoundingBox.GetPoints();
 		while (true)
 		{
-			glm::mat4 mvp = camera.GetProjectionMatrix(aspectRatio) * camera.GetViewMatrix();
+			glm::mat4 mvp = controllableCamera.GetProjectionMatrix(aspectRatio) * controllableCamera.GetViewMatrix();
 			bool allPointsInCamView = true;
 			for (const glm::vec3& point : bboxPoints)
 			{
@@ -292,22 +326,25 @@ void Scene::Render(float aspectRatio)
 			else
 			{
 				offsetFromCenter *= 1.5f;
-				camera.position = center + offsetFromCenter;
+				controllableCamera.position = center + offsetFromCenter;
 			}
 		}
-		camera.movementSpeed = maxDim / 10.0f;
+		controllableCamera.movementSpeed = maxDim / 10.0f;
 		firstFrame = false;
 	}
 }
 
 void Scene::UpdateAndRender(const Input& input)
 {
-	if (input.wPressed) camera.ProcessKeyboard(CAM_FORWARD, input.deltaTime);
-	if (input.aPressed) camera.ProcessKeyboard(CAM_LEFT, input.deltaTime);
-	if (input.sPressed) camera.ProcessKeyboard(CAM_BACKWARD, input.deltaTime);
-	if (input.dPressed) camera.ProcessKeyboard(CAM_RIGHT, input.deltaTime);
+	if (currentCamera == &controllableCamera)
+	{
+		if (input.wPressed) currentCamera->ProcessKeyboard(CAM_FORWARD, input.deltaTime);
+		if (input.aPressed) currentCamera->ProcessKeyboard(CAM_LEFT, input.deltaTime);
+		if (input.sPressed) currentCamera->ProcessKeyboard(CAM_BACKWARD, input.deltaTime);
+		if (input.dPressed) currentCamera->ProcessKeyboard(CAM_RIGHT, input.deltaTime);
 
-	if (input.leftMousePressed) camera.ProcessMouseMovement(input.mouseDeltaX, input.mouseDeltaY);
+		if (input.leftMousePressed) currentCamera->ProcessMouseMovement(input.mouseDeltaX, input.mouseDeltaY);
+	}
 
 	time += input.deltaTime;
 
@@ -420,6 +457,7 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 
 		RenderBoundingBox(entityMesh.boundingBox, projection * modelView);
 
+		// TODO: find better place for calculating scene bbox/non-rendering stuff
 		auto bboxWorldPoints = entityMesh.boundingBox.GetPoints();
 		auto globalTransform3x3 = glm::mat3(globalTransform);
 		for (glm::vec3& point : bboxWorldPoints)
@@ -428,6 +466,20 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 			sceneBoundingBox.minXYZ = glm::min(point, sceneBoundingBox.minXYZ);
 			sceneBoundingBox.maxXYZ = glm::max(point, sceneBoundingBox.maxXYZ);
 		}
+	}
+
+	if (entity.cameraIdx >= 0)
+	{
+		// We don't need to mess with yaw/pitch. Those are only used for changing camera via keyboard/mouse input. 
+		// Entity cameras are not controllable by input; they only change when their entity's transform changes.
+		Camera& camera = cameras[entity.cameraIdx];
+		glm::vec4 globalTransformXAxisNormalized = glm::normalize(globalTransform[0]);
+		glm::vec4 globalTransformYAxisNormalized = glm::normalize(globalTransform[1]);
+		glm::vec4 globalTransformZAxisNormalized = glm::normalize(globalTransform[2]);
+		camera.right = globalTransformXAxisNormalized;
+		camera.up = globalTransformYAxisNormalized;
+		camera.front = -globalTransformZAxisNormalized;
+		camera.position = glm::vec3(globalTransform[3]);
 	}
 
 	for (int childIndex : entity.children)
@@ -479,14 +531,52 @@ void Scene::RenderUI()
 		{
 			for (int i = 0; i < animations.size(); i++)
 			{
-				const bool is_selected = (currentAnimationIdx == i);
-				if (ImGui::Selectable(animations[i].name.c_str(), is_selected))
+				const bool isSelected = (currentAnimationIdx == i);
+				if (ImGui::Selectable(animations[i].name.c_str(), isSelected))
 				{
 					currentAnimationIdx = i;
 				}
 
 				// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-				if (is_selected)
+				if (isSelected)
+				{
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+
+			ImGui::EndCombo();
+		}
+
+		ImGui::End();
+	}
+
+	if (!cameras.empty())
+	{
+		ImGui::Begin("Cameras");
+
+		const char* currentCameraName = currentCamera->name.c_str();
+		if (ImGui::BeginCombo("Camera", currentCameraName))
+		{
+			const bool isSelected = currentCamera == &controllableCamera;
+			if (ImGui::Selectable(controllableCamera.name.c_str(), isSelected))
+			{
+				currentCamera = &controllableCamera;
+			}
+			if (isSelected)
+			{
+				ImGui::SetItemDefaultFocus();
+			}
+
+			for (int i = 0; i < cameras.size(); i++)
+			{
+				const bool isSelected = currentCamera == &cameras[i];
+				if (ImGui::Selectable(cameras[i].name.c_str(), isSelected))
+				{
+					currentCamera = &cameras[i];
+				}
+
+				// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+				if (isSelected)
 				{
 					ImGui::SetItemDefaultFocus();
 				}

@@ -15,7 +15,6 @@ class Scene
 public:
 	Scene(const tinygltf::Scene& scene, const tinygltf::Model& model);
 	void UpdateAndRender(const Input& input);
-	Camera camera;
 	float time = 0.0f; // TODO: remove
 private:
 	void Render(float aspectRatio);
@@ -26,6 +25,9 @@ private:
 	std::vector<Animation> animations;
 	std::vector<Entity> entities;
 	std::vector<Skeleton> skeletons;
+	std::vector<Camera> cameras;
+	Camera controllableCamera;
+	Camera* currentCamera = &controllableCamera;
 	GLTFResources resources;
 	std::string selectedEntityName;
 	int currentAnimationIdx = 0;

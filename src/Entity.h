@@ -14,5 +14,6 @@ struct Entity
 	int parent = -1;
 	int meshIdx = -1;
 	int skeletonIdx = -1;
+	int cameraIdx = -1;
 	std::vector<float> morphTargetWeights;
 };
