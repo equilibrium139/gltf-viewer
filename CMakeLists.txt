@@ -20,6 +20,8 @@ src/GLTFResources.h
 src/Input.h
 src/Mesh.cpp
 src/Mesh.h
+src/mikktspace.cpp
+src/mikktspace.h
 src/PBRMaterial.h
 src/PBRMaterial.cpp
 src/Scene.h

@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <cstring>
 #include "GLTFHelpers.h"
+#include "mikktspace.h"
 #include <utility>
 #include <vector>
 #include <span>
@@ -123,7 +124,8 @@ static int GetVertexSizeBytes(VertexAttribute attributes)
 	return size;
 }
 
-static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interleavedBuffer, std::span<const std::uint8_t> attrData, int attrSizeBytes, int attrOffset, int vertexSizeBytes, int numVertices)
+static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interleavedBuffer, std::span<const std::uint8_t> attrData, int attrSizeBytes, int attrOffset, 
+	int vertexSizeBytes, int numVertices)
 {
 	const std::uint8_t* attrDataPtr = attrData.data();
 
@@ -138,7 +140,8 @@ static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interl
 	}
 }
 
-static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interleavedBuffer, const tinygltf::Accessor& accessor, int vertexSizeBytes, VertexAttribute attribute, VertexAttribute attributes, const tinygltf::Model& model)
+static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interleavedBuffer, const tinygltf::Accessor& accessor, int vertexSizeBytes, VertexAttribute attribute,
+	VertexAttribute attributes, const tinygltf::Model& model)
 {
 	// Positions, normals, and tangents are always float vec3 so we can always treat them the same, but the other types can have different component types
 	// so they need to be converted to a single type
@@ -182,7 +185,7 @@ static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interl
 	}
 }
 
-static std::vector<std::uint8_t> GetInterleavedVertexBuffer(const tinygltf::Primitive& primitive, VertexAttribute attributes, const tinygltf::Model& model)
+static std::vector<std::uint8_t> GetInterleavedVertexBuffer(const tinygltf::Primitive& primitive, VertexAttribute attributes, const tinygltf::Model& model, bool generateTangents)
 {
 	assert(HasFlag(attributes, VertexAttribute::POSITION) && "Assuming all primitives have position attribute.");
 
@@ -244,7 +247,7 @@ static std::vector<std::uint8_t> GetInterleavedVertexBuffer(const tinygltf::Prim
 		const tinygltf::Accessor& accessor = model.accessors[accessorIndex];
 		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, VertexAttribute::MORPH_TARGET1_NORMAL, attributes, model);
 	}
-	if (HasFlag(attributes, VertexAttribute::TANGENT))
+	if (HasFlag(attributes, VertexAttribute::TANGENT) && !generateTangents)
 	{
 		int tangentAccessorIndex = primitive.attributes.find("TANGENT")->second;
 		const tinygltf::Accessor& tangentAccessor = model.accessors[tangentAccessorIndex];
@@ -319,6 +322,133 @@ static BBox ComputeBoundingBox(const std::vector<std::uint8_t>& vertexBuffer, in
 	return bbox;
 }
 
+static void GenerateTangents(std::vector<std::uint8_t>& vertexBuffer, const std::vector<std::uint32_t>* indexBuffer, VertexAttribute attributes)
+{
+	assert(HasFlag(attributes, VertexAttribute::NORMAL | VertexAttribute::TEXCOORD | VertexAttribute::TANGENT) && "Must have normals and texture coordinates to generate tangents");
+
+	SMikkTSpaceInterface mikktInterface{};
+
+	SMikkTSpaceContext context{};
+	struct UserData
+	{
+		std::vector<std::uint8_t>& vb; 
+		const std::vector<std::uint32_t>* ib; 
+		VertexAttribute attributes;
+		int stride;
+		int texcoordOffsetBytes;
+		int normalOffsetBytes;
+		int tangentOffsetBytes;
+	};
+	UserData userData{ vertexBuffer, indexBuffer, attributes, GetVertexSizeBytes(attributes), 
+					   GetAttributeByteOffset(attributes, VertexAttribute::TEXCOORD), GetAttributeByteOffset(attributes, VertexAttribute::NORMAL),
+					   GetAttributeByteOffset(attributes, VertexAttribute::TANGENT) };
+	context.m_pUserData = &userData;
+	context.m_pInterface = &mikktInterface;
+
+	mikktInterface.m_getNumFaces = 
+	[](const SMikkTSpaceContext* pContext) 
+	{
+		auto userData = static_cast<UserData*>(pContext->m_pUserData);
+		if (userData->ib != nullptr) return (int)userData->ib->size() / 3;
+		return (int)userData->vb.size() / 3;
+	};
+	mikktInterface.m_getNumVerticesOfFace = [](const SMikkTSpaceContext*, int) { return 3; }; // Assuming triangles
+	if (indexBuffer != nullptr)
+	{
+		mikktInterface.m_getPosition =
+		[](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert)
+		{
+			auto userData = static_cast<const UserData*>(pContext->m_pUserData);
+			std::uint32_t index = (*userData->ib)[iFace * 3 + iVert];
+			const glm::vec3* pos = reinterpret_cast<const glm::vec3*>(&userData->vb[index * userData->stride]);
+			fvPosOut[0] = pos->x;
+			fvPosOut[1] = pos->y;
+			fvPosOut[2] = pos->z;
+		};
+
+		mikktInterface.m_getNormal =
+			[](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert)
+		{
+			auto userData = static_cast<const UserData*>(pContext->m_pUserData);
+			std::uint32_t index = (*userData->ib)[iFace * 3 + iVert];
+			const glm::vec3* normal = reinterpret_cast<const glm::vec3*>(&userData->vb[(index * userData->stride) + userData->normalOffsetBytes]);
+			fvPosOut[0] = normal->x;
+			fvPosOut[1] = normal->y;
+			fvPosOut[2] = normal->z;
+		};
+
+		mikktInterface.m_getTexCoord =
+			[](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert)
+		{
+			auto userData = static_cast<const UserData*>(pContext->m_pUserData);
+			std::uint32_t index = (*userData->ib)[iFace * 3 + iVert];
+			const glm::vec2* texCoord = reinterpret_cast<const glm::vec2*>(&userData->vb[(index * userData->stride) + userData->texcoordOffsetBytes]);
+			fvPosOut[0] = texCoord->x;
+			fvPosOut[1] = texCoord->y;
+		};
+
+		mikktInterface.m_setTSpaceBasic =
+			[](const SMikkTSpaceContext* pContext, const float fvTangent[], const float fSign, const int iFace, const int iVert)
+		{
+			auto userData = static_cast<const UserData*>(pContext->m_pUserData);
+			std::uint32_t index = (*userData->ib)[iFace * 3 + iVert];
+			glm::vec4* tangent = reinterpret_cast<glm::vec4*>(&userData->vb[(index * userData->stride) + userData->tangentOffsetBytes]);
+			tangent->x = fvTangent[0];
+			tangent->y = fvTangent[1];
+			tangent->z = fvTangent[2];
+			tangent->w = fSign;
+		};
+	}
+	else
+	{
+		mikktInterface.m_getPosition =
+			[](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert)
+		{
+			auto userData = static_cast<const UserData*>(pContext->m_pUserData);
+			int index = iFace * 3 + iVert;
+			const glm::vec3* pos = reinterpret_cast<const glm::vec3*>(&userData->vb[index * userData->stride]);
+			fvPosOut[0] = pos->x;
+			fvPosOut[1] = pos->y;
+			fvPosOut[2] = pos->z;
+		};
+
+		mikktInterface.m_getNormal =
+			[](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert)
+		{
+			auto userData = static_cast<const UserData*>(pContext->m_pUserData);
+			int index = iFace * 3 + iVert;
+			const glm::vec3* normal = reinterpret_cast<const glm::vec3*>(&userData->vb[(index * userData->stride) + userData->normalOffsetBytes]);
+			fvPosOut[0] = normal->x;
+			fvPosOut[1] = normal->y;
+			fvPosOut[2] = normal->z;
+		};
+
+		mikktInterface.m_getTexCoord =
+			[](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert)
+		{
+			auto userData = static_cast<const UserData*>(pContext->m_pUserData);
+			int index = iFace * 3 + iVert;
+			const glm::vec2* texCoord = reinterpret_cast<const glm::vec2*>(&userData->vb[(index * userData->stride) + userData->texcoordOffsetBytes]);
+			fvPosOut[0] = texCoord->x;
+			fvPosOut[1] = texCoord->y;
+		};
+
+		mikktInterface.m_setTSpaceBasic =
+			[](const SMikkTSpaceContext* pContext, const float fvTangent[], const float fSign, const int iFace, const int iVert)
+		{
+			auto userData = static_cast<const UserData*>(pContext->m_pUserData);
+			int index = iFace * 3 + iVert;
+			glm::vec4* tangent = reinterpret_cast<glm::vec4*>(&userData->vb[(index * userData->stride) + userData->tangentOffsetBytes]);
+			tangent->x = fvTangent[0];
+			tangent->y = fvTangent[1];
+			tangent->z = fvTangent[2];
+			tangent->w = fSign;
+		};
+	}
+
+	genTangSpaceDefault(&context);
+}
+
 // Create one interleaved vertex buffer that contains the vertices of all the mesh's primitives
 Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 {
@@ -343,14 +473,31 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 
 		bool hasTangents = HasFlag(submesh.flags, VertexAttribute::TANGENT);
 		assert(!hasTangents || hasNormals && "Primitive with tangents must also has normals");
-
-		if (!hasTangents && model.materials[primitive.material].normalTexture.index >= 0)
+		
+		bool hasNormalMap = model.materials[primitive.material].normalTexture.index >= 0;
+		bool generateTangents = !hasTangents && hasNormalMap;
+		if (generateTangents)
 		{
-			std::string s = "oh shit\n";
+			// TODO: generate tangents for morph targets
+			assert(!hasMorphTargets && "Generating tangents with morph targets not currently supported");
+			submesh.flags |= VertexAttribute::TANGENT;
 		}
 
 		int submeshVertexSizeBytes = GetVertexSizeBytes(submesh.flags);
-		std::vector<std::uint8_t> submeshVertexBuffer = GetInterleavedVertexBuffer(primitive, submesh.flags, model);
+		std::vector<std::uint8_t> submeshVertexBuffer = GetInterleavedVertexBuffer(primitive, submesh.flags, model, generateTangents);
+
+		submesh.hasIndexBuffer = primitive.indices >= 0;
+		std::vector<std::uint32_t> primitiveIndexBuffer;
+		if (submesh.hasIndexBuffer)
+		{
+			primitiveIndexBuffer = GetIndexBuffer(primitive, model, 0);
+			submesh.countVerticesOrIndices = primitiveIndexBuffer.size();
+		}
+
+		if (generateTangents)
+		{
+			GenerateTangents(submeshVertexBuffer, submesh.hasIndexBuffer ? &primitiveIndexBuffer : nullptr, submesh.flags);
+		}
 
 		BBox submeshBoundingBox = ComputeBoundingBox(submeshVertexBuffer, submeshVertexSizeBytes);
 	
@@ -441,11 +588,8 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_TANGENT)->second;
 		}
 
-		submesh.hasIndexBuffer = primitive.indices >= 0;
 		if (submesh.hasIndexBuffer)
 		{
-			std::vector<std::uint32_t> primitiveIndexBuffer = GetIndexBuffer(primitive, model, 0);
-			submesh.countVerticesOrIndices = primitiveIndexBuffer.size();
 			GLuint IBO;
 			glGenBuffers(1, &IBO);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
