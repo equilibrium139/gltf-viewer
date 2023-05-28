@@ -16,6 +16,7 @@ struct Material
     float metallicFactor;
     float roughnessFactor; 
     sampler2D metallicRoughnessTexture;
+    sampler2D normalTexture;
     float occlusionStrength;
     sampler2D occlusionTexture;
 };
@@ -68,9 +69,15 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
 #ifdef HAS_TEXCOORD
 in vec2 texCoords;
 #endif // HAS_TEXCOORD
+
 in vec3 surfacePosVS;
+
 #ifdef HAS_NORMALS
-in vec3 surfaceNormalVS;
+    #ifdef HAS_TANGENTS
+        in mat3 TBN;
+    #else
+        in vec3 surfaceNormalVS;
+    #endif // HAS_TANGENTS
 #endif // HAS_NORMALS
 
 out vec4 fragColor;
@@ -78,7 +85,14 @@ out vec4 fragColor;
 void main()
 {
 #ifdef HAS_NORMALS
-    vec3 unitNormal = normalize(surfaceNormalVS);
+    #ifdef HAS_TANGENTS
+        mat3 normalizedTBN = mat3(normalize(TBN[0]), normalize(TBN[1]), normalize(TBN[2]));
+        vec3 unitNormal = texture(material.normalTexture, texCoords).rgb;
+        unitNormal = unitNormal * 2.0 - 1.0;
+        unitNormal = normalize(normalizedTBN * unitNormal);
+    #else
+        vec3 unitNormal = normalize(surfaceNormalVS);
+    #endif // HAS_TANGENTS
 #elif defined(FLAT_SHADING)
     vec3 dxTangent = dFdx(surfacePosVS);
     vec3 dyTangent = dFdy(surfacePosVS);

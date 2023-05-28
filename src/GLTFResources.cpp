@@ -29,6 +29,10 @@ static std::vector<std::string> GetShaderDefines(VertexAttribute flags, bool fla
 	{
 		defines.emplace_back("FLAT_SHADING");
 	}
+	if (HasFlag(flags, VertexAttribute::TANGENT))
+	{
+		defines.emplace_back("HAS_TANGENTS");
+	}
 
 
 	return defines;

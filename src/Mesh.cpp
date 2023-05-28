@@ -15,7 +15,8 @@ static const std::unordered_map<std::string, VertexAttribute> vertexAttributeMap
 	{"TEXCOORD_0",  VertexAttribute::TEXCOORD},
 	{"NORMAL", VertexAttribute::NORMAL},
 	{"JOINTS_0", VertexAttribute::WEIGHTS},
-	{"WEIGHTS_0", VertexAttribute::JOINTS}
+	{"WEIGHTS_0", VertexAttribute::JOINTS},
+	{"TANGENT", VertexAttribute::TANGENT }
 };
 static const std::vector<VertexAttribute> vertexAttributeOrdering =
 {
@@ -27,7 +28,10 @@ static const std::vector<VertexAttribute> vertexAttributeOrdering =
 	VertexAttribute::MORPH_TARGET0_POSITION,
 	VertexAttribute::MORPH_TARGET1_POSITION,
 	VertexAttribute::MORPH_TARGET0_NORMAL,
-	VertexAttribute::MORPH_TARGET1_NORMAL
+	VertexAttribute::MORPH_TARGET1_NORMAL,
+	VertexAttribute::TANGENT,
+	VertexAttribute::MORPH_TARGET0_TANGENT,
+	VertexAttribute::MORPH_TARGET1_TANGENT,
 };
 static const std::unordered_map<VertexAttribute, int> attributeByteSizes =
 {
@@ -39,7 +43,10 @@ static const std::unordered_map<VertexAttribute, int> attributeByteSizes =
 	{VertexAttribute::MORPH_TARGET0_POSITION, 12},
 	{VertexAttribute::MORPH_TARGET1_POSITION, 12},
 	{VertexAttribute::MORPH_TARGET0_NORMAL, 12},
-	{VertexAttribute::MORPH_TARGET1_NORMAL, 12}
+	{VertexAttribute::MORPH_TARGET1_NORMAL, 12},
+	{VertexAttribute::TANGENT, 16},
+	{VertexAttribute::MORPH_TARGET0_TANGENT, 12},
+	{VertexAttribute::MORPH_TARGET1_TANGENT, 12},
 };
 
 static int GetAttributeByteOffset(VertexAttribute attributes, VertexAttribute attribute)
@@ -90,6 +97,12 @@ static VertexAttribute GetPrimitiveVertexLayout(const tinygltf::Primitive& primi
 			attributes |= VertexAttribute::MORPH_TARGET0_NORMAL;
 			attributes |= VertexAttribute::MORPH_TARGET1_NORMAL;
 		}
+		if (HasFlag(attributes, VertexAttribute::TANGENT))
+		{
+			assert(primitive.targets[0].contains("TANGENT") && primitive.targets[1].contains("TANGENT"));
+			attributes |= VertexAttribute::MORPH_TARGET0_TANGENT;
+			attributes |= VertexAttribute::MORPH_TARGET1_TANGENT;
+		}
 	}
 	
 	return attributes;
@@ -133,7 +146,8 @@ static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interl
 	{
 	case VertexAttribute::POSITION: case VertexAttribute::NORMAL: 
 	case VertexAttribute::MORPH_TARGET0_POSITION: case VertexAttribute::MORPH_TARGET1_POSITION:
-	case VertexAttribute::MORPH_TARGET0_NORMAL: case VertexAttribute::MORPH_TARGET1_NORMAL: // TODO: add tangents
+	case VertexAttribute::MORPH_TARGET0_NORMAL: case VertexAttribute::MORPH_TARGET1_NORMAL: 
+	case VertexAttribute::TANGENT: case VertexAttribute::MORPH_TARGET0_TANGENT: case VertexAttribute::MORPH_TARGET1_TANGENT: 
 		FillInterleavedBufferWithAttribute(interleavedBuffer, GetAccessorBytes(accessor, model), attributeByteSizes.find(attribute)->second, GetAttributeByteOffset(attributes, attribute), vertexSizeBytes, accessor.count);
 		break;
 	case VertexAttribute::WEIGHTS: case VertexAttribute::TEXCOORD:
@@ -230,6 +244,24 @@ static std::vector<std::uint8_t> GetInterleavedVertexBuffer(const tinygltf::Prim
 		const tinygltf::Accessor& accessor = model.accessors[accessorIndex];
 		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, VertexAttribute::MORPH_TARGET1_NORMAL, attributes, model);
 	}
+	if (HasFlag(attributes, VertexAttribute::TANGENT))
+	{
+		int tangentAccessorIndex = primitive.attributes.find("TANGENT")->second;
+		const tinygltf::Accessor& tangentAccessor = model.accessors[tangentAccessorIndex];
+		FillInterleavedBufferWithAttribute(buffer, tangentAccessor, vertexSizeBytes, VertexAttribute::TANGENT, attributes, model);
+	}
+	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET0_TANGENT))
+	{
+		int accessorIndex = primitive.targets[0].find("TANGENT")->second;
+		const tinygltf::Accessor& accessor = model.accessors[accessorIndex];
+		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, VertexAttribute::MORPH_TARGET0_TANGENT, attributes, model);
+	}
+	if (HasFlag(attributes, VertexAttribute::MORPH_TARGET1_TANGENT))
+	{
+		int accessorIndex = primitive.targets[1].find("TANGENT")->second;
+		const tinygltf::Accessor& accessor = model.accessors[accessorIndex];
+		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, VertexAttribute::MORPH_TARGET1_TANGENT, attributes, model);
+	}
 
 	return buffer;
 }
@@ -309,6 +341,14 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 		bool hasNormals = HasFlag(submesh.flags, VertexAttribute::NORMAL);
 		submesh.flatShading = hasMaterial && !hasNormals;
 
+		bool hasTangents = HasFlag(submesh.flags, VertexAttribute::TANGENT);
+		assert(!hasTangents || hasNormals && "Primitive with tangents must also has normals");
+
+		if (!hasTangents && model.materials[primitive.material].normalTexture.index >= 0)
+		{
+			std::string s = "oh shit\n";
+		}
+
 		int submeshVertexSizeBytes = GetVertexSizeBytes(submesh.flags);
 		std::vector<std::uint8_t> submeshVertexBuffer = GetInterleavedVertexBuffer(primitive, submesh.flags, model);
 
@@ -380,6 +420,25 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 			glEnableVertexAttribArray(8);
 			glVertexAttribPointer(8, 3, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
 			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_NORMAL)->second;
+		}
+
+		if (HasFlag(submesh.flags, VertexAttribute::TANGENT))
+		{
+			glEnableVertexAttribArray(9);
+			glVertexAttribPointer(9, 4, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
+			offset += attributeByteSizes.find(VertexAttribute::TANGENT)->second;
+		}
+
+		if (HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET0_TANGENT))
+		{
+			assert(HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET1_TANGENT));
+			glEnableVertexAttribArray(10);
+			glVertexAttribPointer(10, 3, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
+			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET0_TANGENT)->second;
+
+			glEnableVertexAttribArray(11);
+			glVertexAttribPointer(11, 3, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
+			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_TANGENT)->second;
 		}
 
 		submesh.hasIndexBuffer = primitive.indices >= 0;

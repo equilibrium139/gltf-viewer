@@ -329,7 +329,7 @@ void Scene::Render(float aspectRatio)
 				controllableCamera.position = center + offsetFromCenter;
 			}
 		}
-		controllableCamera.movementSpeed = maxDim / 10.0f;
+		controllableCamera.movementSpeed = maxDim / 5.0f;
 		firstFrame = false;
 	}
 }
@@ -430,14 +430,13 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 					shader.SetInt("material.metallicRoughnessTexture", textureUnit);
 					textureUnit++;
 
-					// TODO: add normal mapping
-					//if (material.normalTextureIdx >= 0)
-					//{
-					//	glActiveTexture(GL_TEXTURE0 + textureUnit);
-					//	glBindTexture(GL_TEXTURE_2D, resources.textures[material.normalTextureIdx].id);
-					//	shader.SetInt("material.baseColorTexture", textureUnit);
-					//	textureUnit++;
-					//}
+					if (material.normalTextureIdx >= 0)
+					{
+						glActiveTexture(GL_TEXTURE0 + textureUnit);
+						glBindTexture(GL_TEXTURE_2D, resources.textures[material.normalTextureIdx].id);
+						shader.SetInt("material.normalTexture", textureUnit);
+						textureUnit++;
+					}
 
 					glActiveTexture(GL_TEXTURE0 + textureUnit);
 					glBindTexture(GL_TEXTURE_2D, resources.textures[material.occlusionTextureIdx].id);
