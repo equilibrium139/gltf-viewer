@@ -17,6 +17,7 @@ struct Material
     float roughnessFactor; 
     sampler2D metallicRoughnessTexture;
     sampler2D normalTexture;
+    float normalScale;
     float occlusionStrength;
     sampler2D occlusionTexture;
 };
@@ -89,6 +90,7 @@ void main()
         mat3 normalizedTBN = mat3(normalize(TBN[0]), normalize(TBN[1]), normalize(TBN[2]));
         vec3 unitNormal = texture(material.normalTexture, texCoords).rgb;
         unitNormal = unitNormal * 2.0 - 1.0;
+        unitNormal *= vec3(material.normalScale, material.normalScale, 1.0);
         unitNormal = normalize(normalizedTBN * unitNormal);
     #else
         vec3 unitNormal = normalize(surfaceNormalVS);

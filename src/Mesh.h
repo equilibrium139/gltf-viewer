@@ -22,8 +22,8 @@ struct Mesh
 	Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model);
 	std::vector<Submesh> submeshes;
 	BBox boundingBox {
-		.minXYZ = glm::vec3(FLT_MAX, FLT_MAX, FLT_MAX),
-		.maxXYZ = glm::vec3(FLT_MIN, FLT_MIN, FLT_MIN)
+		.minXYZ = glm::vec3(FLT_MAX),
+		.maxXYZ = glm::vec3(-FLT_MAX)
 	};
 	bool HasMorphTargets();
 };

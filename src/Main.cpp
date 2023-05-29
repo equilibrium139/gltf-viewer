@@ -187,7 +187,7 @@ int main(int argc, char** argv)
     float previousFrameTime = 0.0f;
     float currentFrameTime = 0.0f;
 
-    while (sampleModelNames[selectedModelIndex] != "ABeautifulGame")
+    while (sampleModelNames[selectedModelIndex] != "InterpolationTest")
     {
         selectedModelIndex++;
     }

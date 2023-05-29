@@ -14,6 +14,7 @@ struct PBRMaterial
 	float roughnessFactor;
 	int metallicRoughnessTextureIdx; // guaranteed >= 0
 	int normalTextureIdx;
+	float normalScale;
 	float occlusionStrength;
 	int occlusionTextureIdx; // guaranteed >= 0
 

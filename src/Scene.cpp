@@ -272,7 +272,7 @@ void Scene::Render(float aspectRatio)
 		if (entity.parent < 0) RenderEntity(entity, glm::mat4(1.0f), view, projection);
 	}
 
-	RenderBoundingBox(sceneBoundingBox, projection * view);
+	//RenderBoundingBox(sceneBoundingBox, projection * view);
 
 	// Position controllable camera according to scene bounding box
 	if (firstFrame)
@@ -356,17 +356,17 @@ void Scene::UpdateAndRender(const Input& input)
 		{
 			const auto& anim = animations[i];
 
-		float normalizedTime = std::fmod(time, anim.durationSeconds);
+			float normalizedTime = std::fmod(time, anim.durationSeconds);
 
-		for (const auto& entityAnim : anim.entityAnimations)
-		{
-			Entity& entity = entities[entityAnim.entityIdx];
+			for (const auto& entityAnim : anim.entityAnimations)
+			{
+				Entity& entity = entities[entityAnim.entityIdx];
 
-			if (entityAnim.translations.values.size() > 0) entity.transform.translation = SampleAt(entityAnim.translations, normalizedTime);
-			if (entityAnim.scales.values.size() > 0) entity.transform.scale = SampleAt(entityAnim.scales, normalizedTime);
-			if (entityAnim.rotations.values.size() > 0) entity.transform.rotation = SampleAt(entityAnim.rotations, normalizedTime);
-			if (entityAnim.weights.values.size() > 0) entity.morphTargetWeights = SampleWeightsAt(entityAnim.weights, normalizedTime);
-		}
+				if (entityAnim.translations.values.size() > 0) entity.transform.translation = SampleAt(entityAnim.translations, normalizedTime);
+				if (entityAnim.scales.values.size() > 0) entity.transform.scale = SampleAt(entityAnim.scales, normalizedTime);
+				if (entityAnim.rotations.values.size() > 0) entity.transform.rotation = SampleAt(entityAnim.rotations, normalizedTime);
+				if (entityAnim.weights.values.size() > 0) entity.morphTargetWeights = SampleWeightsAt(entityAnim.weights, normalizedTime);
+			}
 
 		}
 	}
@@ -422,7 +422,8 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 				shader.SetFloat("material.occlusionStrength", material.occlusionStrength);
 
 				bool hasTextureCoords = HasFlag(submesh.flags, VertexAttribute::TEXCOORD);
-
+				
+				// TODO: don't set unused textures
 				if (hasTextureCoords)
 				{
 					int textureUnit = 0;
@@ -442,6 +443,13 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 						glBindTexture(GL_TEXTURE_2D, resources.textures[material.normalTextureIdx].id);
 						shader.SetInt("material.normalTexture", textureUnit);
 						textureUnit++;
+
+						// This uniform variable is only used if tangents (which are synonymous with normal mapping for now)
+						// are provided
+						if (HasFlag(submesh.flags, VertexAttribute::TANGENT))
+						{
+							shader.SetFloat("material.normalScale", material.normalScale);
+						}
 					}
 
 					glActiveTexture(GL_TEXTURE0 + textureUnit);
@@ -460,14 +468,13 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 			}
 		}
 
-		RenderBoundingBox(entityMesh.boundingBox, projection * modelView);
+		//RenderBoundingBox(entityMesh.boundingBox, projection * modelView);
 
 		// TODO: find better place for calculating scene bbox/non-rendering stuff
 		auto bboxWorldPoints = entityMesh.boundingBox.GetPoints();
-		auto globalTransform3x3 = glm::mat3(globalTransform);
 		for (glm::vec3& point : bboxWorldPoints)
 		{
-			point = globalTransform3x3 * point;
+			point = globalTransform * glm::vec4(point, 1.0f);
 			sceneBoundingBox.minXYZ = glm::min(point, sceneBoundingBox.minXYZ);
 			sceneBoundingBox.maxXYZ = glm::max(point, sceneBoundingBox.maxXYZ);
 		}
@@ -531,8 +538,8 @@ void Scene::RenderUI()
 	{
 		ImGui::Begin("Animations");
 
-			for (int i = 0; i < animations.size(); i++)
-			{
+		for (int i = 0; i < animations.size(); i++)
+		{
 			ImGui::Checkbox(animations[i].name.c_str(), reinterpret_cast<bool*>(&animationEnabled[i]));
 		}
 

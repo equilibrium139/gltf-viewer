@@ -31,12 +31,11 @@ private:
 	Camera* currentCamera = &controllableCamera;
 	GLTFResources resources;
 	std::string selectedEntityName;
-	int currentAnimationIdx = 0;
 	GLuint boundingBoxVAO;
 	Shader boundingBoxShader = Shader("Shaders/bbox.vert", "Shaders/bbox.frag");
 	BBox sceneBoundingBox = {
 		.minXYZ = glm::vec3(FLT_MAX),
-		.maxXYZ = glm::vec3(FLT_MIN),
+		.maxXYZ = glm::vec3(-FLT_MAX),
 	};
 	bool firstFrame = true;
 };

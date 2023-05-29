@@ -23,7 +23,7 @@ layout(location = 6) in vec3 aMorphBasePosDifference2;
     #ifdef HAS_TANGENTS
         layout(location = 10) in vec3 aMorphBaseTangentDifference1;
         layout(location = 11) in vec3 aMorphBaseTangentDifference2;
-    #endif
+    #endif // HAS_TANGENTS
 #endif // HAS_MORPH_TARGETS
 
 #ifdef HAS_TANGENTS

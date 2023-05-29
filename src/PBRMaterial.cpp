@@ -33,7 +33,8 @@ PBRMaterial FromGltfMaterial(const tinygltf::Material& gltfMaterial, const tinyg
 		material.metallicRoughnessTextureIdx = white1x1RGBATextureIndex;
 	}
 	material.normalTextureIdx = gltfMaterial.normalTexture.index;
-	assert(gltfMaterial.normalTexture.index < 0 || gltfMaterial.normalTexture.scale == 1.0f);
+	material.normalScale = gltfMaterial.normalTexture.scale;
+	//assert(gltfMaterial.normalTexture.index < 0 || gltfMaterial.normalTexture.scale == 1.0f);
 
 	material.occlusionStrength = gltfMaterial.occlusionTexture.strength;
 	material.occlusionTextureIdx = gltfMaterial.occlusionTexture.index;

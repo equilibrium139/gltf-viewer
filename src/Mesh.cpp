@@ -303,8 +303,8 @@ static BBox ComputeBoundingBox(const std::vector<std::uint8_t>& vertexBuffer, in
 {
 	// assumes positions are at offset 0
 	BBox bbox{
-		.minXYZ = glm::vec3(FLT_MAX, FLT_MAX, FLT_MAX),
-		.maxXYZ = glm::vec3(FLT_MIN, FLT_MIN, FLT_MIN)
+		.minXYZ = glm::vec3(FLT_MAX),
+		.maxXYZ = glm::vec3(-FLT_MAX)
 	};
 
 	const std::uint8_t* vertexBufferPtr = vertexBuffer.data();
