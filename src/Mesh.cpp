@@ -474,13 +474,19 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 		bool hasTangents = HasFlag(submesh.flags, VertexAttribute::TANGENT);
 		assert(!hasTangents || hasNormals && "Primitive with tangents must also has normals");
 		
-		bool hasNormalMap = model.materials[primitive.material].normalTexture.index >= 0;
+		bool hasNormalMap = primitive.material >= 0 && model.materials[primitive.material].normalTexture.index >= 0;
 		bool generateTangents = !hasTangents && hasNormalMap;
 		if (generateTangents)
 		{
 			// TODO: generate tangents for morph targets
 			assert(!hasMorphTargets && "Generating tangents with morph targets not currently supported");
 			submesh.flags |= VertexAttribute::TANGENT;
+		}
+
+		bool discardTangents = hasTangents && !hasNormalMap; // wtf is the point?
+		if (discardTangents)
+		{
+			submesh.flags &= ~VertexAttribute::TANGENT;
 		}
 
 		int submeshVertexSizeBytes = GetVertexSizeBytes(submesh.flags);
@@ -492,6 +498,10 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 		{
 			primitiveIndexBuffer = GetIndexBuffer(primitive, model, 0);
 			submesh.countVerticesOrIndices = primitiveIndexBuffer.size();
+		}
+		else
+		{
+			submesh.countVerticesOrIndices = submeshVertexBuffer.size() / submeshVertexSizeBytes;
 		}
 
 		if (generateTangents)
@@ -594,10 +604,6 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 			glGenBuffers(1, &IBO);
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, IBO);
 			glBufferData(GL_ELEMENT_ARRAY_BUFFER, primitiveIndexBuffer.size() * sizeof(primitiveIndexBuffer[0]), primitiveIndexBuffer.data(), GL_STATIC_DRAW);
-		}
-		else
-		{
-			submesh.countVerticesOrIndices = submeshVertexBuffer.size() / submeshVertexSizeBytes;
 		}
 	}
 }
