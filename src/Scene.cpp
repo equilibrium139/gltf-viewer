@@ -232,6 +232,8 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 		}
 	}
 
+	animationEnabled.resize(animations.size(), true);
+
 	controllableCamera.name = "Controllable Camera";
 	int defaultCameraNameSuffix = 0;
 	for (const tinygltf::Camera& gltfCamera : model.cameras)
@@ -348,9 +350,11 @@ void Scene::UpdateAndRender(const Input& input)
 
 	time += input.deltaTime;
 
-	if (currentAnimationIdx < animations.size())
+	for (int i = 0; i < animations.size(); i++)
 	{
-		const auto& anim = animations[currentAnimationIdx];
+		if (animationEnabled[i])
+		{
+			const auto& anim = animations[i];
 
 		float normalizedTime = std::fmod(time, anim.durationSeconds);
 
@@ -362,6 +366,8 @@ void Scene::UpdateAndRender(const Input& input)
 			if (entityAnim.scales.values.size() > 0) entity.transform.scale = SampleAt(entityAnim.scales, normalizedTime);
 			if (entityAnim.rotations.values.size() > 0) entity.transform.rotation = SampleAt(entityAnim.rotations, normalizedTime);
 			if (entityAnim.weights.values.size() > 0) entity.morphTargetWeights = SampleWeightsAt(entityAnim.weights, normalizedTime);
+		}
+
 		}
 	}
 
@@ -525,25 +531,9 @@ void Scene::RenderUI()
 	{
 		ImGui::Begin("Animations");
 
-		const char* currentAnimName = animations[currentAnimationIdx].name.c_str();
-		if (ImGui::BeginCombo("Animation", currentAnimName))
-		{
 			for (int i = 0; i < animations.size(); i++)
 			{
-				const bool isSelected = (currentAnimationIdx == i);
-				if (ImGui::Selectable(animations[i].name.c_str(), isSelected))
-				{
-					currentAnimationIdx = i;
-				}
-
-				// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
-				if (isSelected)
-				{
-					ImGui::SetItemDefaultFocus();
-				}
-			}
-
-			ImGui::EndCombo();
+			ImGui::Checkbox(animations[i].name.c_str(), reinterpret_cast<bool*>(&animationEnabled[i]));
 		}
 
 		ImGui::End();

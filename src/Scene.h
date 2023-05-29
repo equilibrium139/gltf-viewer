@@ -26,6 +26,7 @@ private:
 	std::vector<Entity> entities;
 	std::vector<Skeleton> skeletons;
 	std::vector<Camera> cameras;
+	std::vector<std::uint8_t> animationEnabled; // avoiding vector<bool> to allow imgui to have bool references to elements 
 	Camera controllableCamera;
 	Camera* currentCamera = &controllableCamera;
 	GLTFResources resources;
