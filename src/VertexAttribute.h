@@ -17,7 +17,8 @@ enum class VertexAttribute : std::uint32_t
     MORPH_TARGET1_NORMAL = 1 << 8,
     TANGENT = 1 << 9,
     MORPH_TARGET0_TANGENT = 1 << 10,
-    MORPH_TARGET1_TANGENT = 1 << 11
+    MORPH_TARGET1_TANGENT = 1 << 11,
+    COLOR = 1 << 12,
 };
 
 inline VertexAttribute operator | (VertexAttribute lhs, VertexAttribute rhs)

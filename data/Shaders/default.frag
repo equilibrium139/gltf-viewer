@@ -81,6 +81,10 @@ in vec3 surfacePosVS;
     #endif // HAS_TANGENTS
 #endif // HAS_NORMALS
 
+#ifdef HAS_VERTEX_COLORS
+in vec4 vertexColor;
+#endif // HAS_VERTEX_COLORS
+
 out vec4 fragColor;
 
 void main()
@@ -113,6 +117,9 @@ void main()
         vec2 metallicRoughness = vec2(material.metallicFactor, material.roughnessFactor);
         float occlusion = material.occlusionStrength;
     #endif // HAS_TEXCOORD
+    #ifdef HAS_VERTEX_COLORS
+        baseColor = baseColor * vertexColor;
+    #endif // HAS_VERTEX_COLORS
     float metallic = metallicRoughness.x;
     float roughness = metallicRoughness.y;
     vec3 F0 = vec3(0.04); 

@@ -33,6 +33,10 @@ static std::vector<std::string> GetShaderDefines(VertexAttribute flags, bool fla
 	{
 		defines.emplace_back("HAS_TANGENTS");
 	}
+	if (HasFlag(flags, VertexAttribute::COLOR))
+	{
+		defines.emplace_back("HAS_VERTEX_COLORS");
+	}
 
 
 	return defines;

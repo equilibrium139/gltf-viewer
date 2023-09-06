@@ -17,7 +17,8 @@ static const std::unordered_map<std::string, VertexAttribute> vertexAttributeMap
 	{"NORMAL", VertexAttribute::NORMAL},
 	{"JOINTS_0", VertexAttribute::WEIGHTS},
 	{"WEIGHTS_0", VertexAttribute::JOINTS},
-	{"TANGENT", VertexAttribute::TANGENT }
+	{"TANGENT", VertexAttribute::TANGENT },
+	{"COLOR_0", VertexAttribute::COLOR },
 };
 static const std::vector<VertexAttribute> vertexAttributeOrdering =
 {
@@ -33,6 +34,7 @@ static const std::vector<VertexAttribute> vertexAttributeOrdering =
 	VertexAttribute::TANGENT,
 	VertexAttribute::MORPH_TARGET0_TANGENT,
 	VertexAttribute::MORPH_TARGET1_TANGENT,
+	VertexAttribute::COLOR,
 };
 static const std::unordered_map<VertexAttribute, int> attributeByteSizes =
 {
@@ -48,6 +50,7 @@ static const std::unordered_map<VertexAttribute, int> attributeByteSizes =
 	{VertexAttribute::TANGENT, 16},
 	{VertexAttribute::MORPH_TARGET0_TANGENT, 12},
 	{VertexAttribute::MORPH_TARGET1_TANGENT, 12},
+	{VertexAttribute::COLOR, 16}, // vertexColor is always converted to RGBA
 };
 
 static int GetAttributeByteOffset(VertexAttribute attributes, VertexAttribute attribute)
@@ -182,6 +185,24 @@ static void FillInterleavedBufferWithAttribute(std::vector<std::uint8_t>& interl
 			FillInterleavedBufferWithAttribute(interleavedBuffer, attrBytes, attributeByteSizes.find(attribute)->second, GetAttributeByteOffset(attributes, attribute), vertexSizeBytes, accessor.count);
 		}
 		break;
+	case VertexAttribute::COLOR:
+		assert(accessor.componentType == TINYGLTF_COMPONENT_TYPE_FLOAT);
+		if (accessor.type == TINYGLTF_TYPE_VEC3) // convert to vec4
+		{
+			auto colorBytes = GetAccessorBytes(accessor, model);
+			std::span<glm::vec3> rgbColors((glm::vec3*)colorBytes.data(), accessor.count);
+			std::vector<glm::vec4> rgbaColors(accessor.count);
+			for (int i = 0; i < accessor.count; i++)
+			{
+				rgbaColors[i] = glm::vec4(rgbColors[i], 1.0f);
+			}
+			std::span<const std::uint8_t> rgbaBytes((std::uint8_t*)rgbaColors.data(), sizeof(glm::vec4) * accessor.count);
+			FillInterleavedBufferWithAttribute(interleavedBuffer, rgbaBytes, attributeByteSizes.find(attribute)->second, GetAttributeByteOffset(attributes, attribute), vertexSizeBytes, accessor.count);
+		}
+		else // format is already vec4
+		{
+			FillInterleavedBufferWithAttribute(interleavedBuffer, GetAccessorBytes(accessor, model), attributeByteSizes.find(attribute)->second, GetAttributeByteOffset(attributes, attribute), vertexSizeBytes, accessor.count);
+		}
 	}
 }
 
@@ -264,6 +285,12 @@ static std::vector<std::uint8_t> GetInterleavedVertexBuffer(const tinygltf::Prim
 		int accessorIndex = primitive.targets[1].find("TANGENT")->second;
 		const tinygltf::Accessor& accessor = model.accessors[accessorIndex];
 		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, VertexAttribute::MORPH_TARGET1_TANGENT, attributes, model);
+	}
+	if (HasFlag(attributes, VertexAttribute::COLOR))
+	{
+		int accessorIndex = primitive.attributes.find("COLOR_0")->second;
+		const tinygltf::Accessor& accessor = model.accessors[accessorIndex];
+		FillInterleavedBufferWithAttribute(buffer, accessor, vertexSizeBytes, VertexAttribute::COLOR, attributes, model);
 	}
 
 	return buffer;
@@ -596,6 +623,13 @@ Mesh::Mesh(const tinygltf::Mesh& mesh, const tinygltf::Model& model)
 			glEnableVertexAttribArray(11);
 			glVertexAttribPointer(11, 3, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
 			offset += attributeByteSizes.find(VertexAttribute::MORPH_TARGET1_TANGENT)->second;
+		}
+
+		if (HasFlag(submesh.flags, VertexAttribute::COLOR))
+		{
+			glEnableVertexAttribArray(12);
+			glVertexAttribPointer(12, 4, GL_FLOAT, GL_FALSE, submeshVertexSizeBytes, (const void*)offset);
+			offset += attributeByteSizes.find(VertexAttribute::COLOR)->second;
 		}
 
 		if (submesh.hasIndexBuffer)

@@ -30,6 +30,10 @@ layout(location = 6) in vec3 aMorphBasePosDifference2;
 layout(location = 9) in vec4 aBaseTangent;
 #endif // HAS_TANGENTS
 
+#ifdef HAS_VERTEX_COLORS
+    layout(location=12) in vec4 aVertexColor;
+#endif // HAS_VERTEX_COLORS
+
 uniform mat4 modelView;
 uniform mat4 projection;
 
@@ -44,7 +48,7 @@ uniform mat4 skinningMatrices[128];
 #ifdef HAS_MORPH_TARGETS
 uniform float morph1Weight; 
 uniform float morph2Weight;
-#endif
+#endif // HAS_MORPH_TARGETS
 
 out vec3 surfacePosVS;
 
@@ -59,6 +63,10 @@ out vec3 surfacePosVS;
 #ifdef HAS_TEXCOORD
 out vec2 texCoords;
 #endif // HAS_TEXCOORD
+
+#ifdef HAS_VERTEX_COLORS
+out vec4 vertexColor;
+#endif // HAS_VERTEX_COLORS
 
 void main()
 {
@@ -117,6 +125,10 @@ void main()
 #ifdef HAS_TEXCOORD
     texCoords = aTexcoords;
 #endif
+
+#ifdef HAS_VERTEX_COLORS
+        vertexColor = aVertexColor;
+#endif // HAS_VERTEX_COLORS
 
     gl_Position = projection * vec4(surfacePosVS, 1.0);
 }
