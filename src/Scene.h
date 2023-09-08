@@ -18,7 +18,7 @@ public:
 	float time = 0.0f; // TODO: remove
 private:
 	void Render(float aspectRatio);
-	void RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection);
+	void RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection, bool parentHighlighted = false);
 	void RenderUI();
 	void RenderHierarchyUI(const Entity& entity);
 	void RenderBoundingBox(const BBox& bbox, const glm::mat4& mvp);
@@ -33,6 +33,7 @@ private:
 	std::string selectedEntityName;
 	GLuint boundingBoxVAO;
 	Shader boundingBoxShader = Shader("Shaders/bbox.vert", "Shaders/bbox.frag");
+	Shader highlightShader = Shader("Shaders/default.vert", "Shaders/highlight.frag");
 	BBox sceneBoundingBox = {
 		.minXYZ = glm::vec3(FLT_MAX),
 		.maxXYZ = glm::vec3(-FLT_MAX),

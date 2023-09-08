@@ -111,3 +111,17 @@ Shader& GLTFResources::GetOrCreateShader(VertexAttribute attributes, bool flatSh
 	shaders.push_back({ { attributes, flatShading }, Shader("Shaders/default.vert", "Shaders/default.frag", nullptr, {}, defines) });
 	return shaders.back().second;
 }
+
+Shader& GLTFResources::GetOrCreateHighlightShader(VertexAttribute attributes)
+{
+	for (auto& pair : highlightShaders)
+	{
+		if (attributes == pair.first)
+		{
+			return pair.second;
+		}
+	}
+	auto defines = GetShaderDefines(attributes, false);
+	highlightShaders.push_back({ attributes, Shader("Shaders/default.vert", "Shaders/highlight.frag", nullptr, {}, defines) });
+	return highlightShaders.back().second;
+}

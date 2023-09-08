@@ -380,8 +380,17 @@ void Scene::UpdateAndRender(const Input& input)
 	}
 }
 
-void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection)
+void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection, bool parentHighlighted)
 {
+	bool highlight = parentHighlighted || selectedEntityName == entity.name;
+	if (highlight)
+	{
+		highlight = true;
+		glEnable(GL_STENCIL_TEST);
+		glStencilFunc(GL_ALWAYS, 1, 0xFF); 
+		glStencilMask(0xFF);
+		glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+	}
 	glm::mat4 globalTransform = parentTransform * entity.transform.GetMatrix();
 	glm::mat4 modelView = view * globalTransform;
 	if (entity.meshIdx >= 0)
@@ -465,6 +474,50 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 			else
 			{
 				glDrawArrays(GL_TRIANGLES, 0, submesh.countVerticesOrIndices);
+			}
+			
+			if (highlight)
+			{
+				Shader& highlightShader = resources.GetOrCreateHighlightShader(submesh.flags);
+				highlightShader.use();
+				glm::mat4 highlightObjModelView = glm::scale(modelView, glm::vec3(1.1f, 1.1f, 1.1f));
+				highlightShader.SetMat4("modelView", glm::value_ptr(highlightObjModelView));
+				highlightShader.SetMat4("projection", glm::value_ptr(projection));
+				bool hasNormals = HasFlag(submesh.flags, VertexAttribute::NORMAL);
+				if (hasNormals)
+				{
+					glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelView)));
+					highlightShader.SetMat3("normalMatrixVS", glm::value_ptr(normalMatrix));
+					highlightShader.SetVec3("pointLight.positionVS", glm::vec3(0.0f, 0.0f, 0.0f));
+					highlightShader.SetVec3("pointLight.color", glm::vec3(0.5f, 0.5f, 0.5f));
+				}
+				if (entity.skeletonIdx >= 0)
+				{
+					auto skinningMatrices = ComputeSkinningMatrices(skeletons[entity.skeletonIdx], entities);
+					highlightShader.SetMat4("skinningMatrices", glm::value_ptr(skinningMatrices.front()), (int)skinningMatrices.size());
+				}
+				bool hasMorphTargets = HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET0_POSITION);
+				if (hasMorphTargets)
+				{
+					shader.SetFloat("morph1Weight", entity.morphTargetWeights[0]);
+					shader.SetFloat("morph2Weight", entity.morphTargetWeights[1]);
+				}
+
+				glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+				glStencilMask(0x00);
+
+				if (submesh.hasIndexBuffer)
+				{
+					glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, nullptr);
+				}
+				else
+				{
+					glDrawArrays(GL_TRIANGLES, 0, submesh.countVerticesOrIndices);
+				}
+
+				glDisable(GL_STENCIL_TEST);
+				glEnable(GL_DEPTH_TEST);
+				glStencilMask(0xFF);
 			}
 		}
 
