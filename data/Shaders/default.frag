@@ -85,10 +85,12 @@ in vec3 surfacePosVS;
 in vec4 vertexColor;
 #endif // HAS_VERTEX_COLORS
 
-out vec4 fragColor;
+layout(location=0) out vec4 fragColor;
+layout(location=1) out float highlight;
 
 void main()
 {
+    highlight = 1;
 #ifdef HAS_NORMALS
     #ifdef HAS_TANGENTS
         mat3 normalizedTBN = mat3(normalize(TBN[0]), normalize(TBN[1]), normalize(TBN[2]));

@@ -2,9 +2,12 @@
 
 #include <algorithm>
 #include "GLTFHelpers.h"
+#include <GLFW/glfw3.h>
 #include "imgui.h"
 
-Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
+// TODO: move rendering stuff to its own class, otherwise buffers will be needlessly duplicated for each scene
+
+Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int windowWidth, int windowHeight)
 	:resources(model)
 {
 	assert(model.scenes.size() == 1); // for now
@@ -43,6 +46,68 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 	glGenBuffers(1, &boundingBoxIBO);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, boundingBoxIBO);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+	GLfloat quadVertices[] = {
+		-1.0f, -1.0f, 0.0f, 0.0f,
+		1.0f, -1.0f, 1.0f, 0.0f,
+		1.0f, 1.0f, 1.0f, 1.0f,
+		-1.0f, 1.0f, 0.0f, 1.0f
+	};
+
+	GLuint quadIndices[] = {
+		0, 1, 2,
+		2, 3, 0
+	};
+
+	glGenVertexArrays(1, &fullscreenQuadVAO);
+	glBindVertexArray(fullscreenQuadVAO);
+
+	GLuint quadVBO;
+	glGenBuffers(1, &quadVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 16, 0);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 16, (void*)8);
+	
+	GLuint quadIBO;
+	glGenBuffers(1, &quadIBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quadIBO); 
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(quadIndices), quadIndices, GL_STATIC_DRAW);
+
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0, 0, windowWidth, windowHeight);
+
+	texW = 1920;
+	texH = 1080;
+
+	glGenTextures(1, &colorTexture);
+	glBindTexture(GL_TEXTURE_2D, colorTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texW, texH, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+
+	glGenRenderbuffers(1, &depthStencilRBO);
+	glBindRenderbuffer(GL_RENDERBUFFER, depthStencilRBO);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, texW, texH);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencilRBO);
+
+	glGenTextures(1, &highlightTexture);
+	glBindTexture(GL_TEXTURE_2D, highlightTexture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, texW, texH, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, highlightTexture, 0);
+
+	static const GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+	glDrawBuffers(2, drawBuffers); // this is framebuffer state so we only need to set it once
+
+	if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	int defaultEntityNameSuffix = 0;
 	
@@ -263,14 +328,43 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model)
 	}
 }
 
-void Scene::Render(float aspectRatio)
+void Scene::Render(int windowWidth, int windowHeight)
 {
 	const auto view = currentCamera->GetViewMatrix();
+	const float aspectRatio = (float)windowWidth / (float)windowHeight;
 	const auto projection = currentCamera->GetProjectionMatrix(aspectRatio);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0, 0, texW, texH);
+
 	for (const Entity& entity : entities)
 	{
 		if (entity.parent < 0) RenderEntity(entity, glm::mat4(1.0f), view, projection);
 	}
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, 0, windowWidth, windowHeight);
+	glBindVertexArray(fullscreenQuadVAO);
+	highlightShader.use();
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, colorTexture);
+	glActiveTexture(GL_TEXTURE1);
+	glBindTexture(GL_TEXTURE_2D, highlightTexture);
+	highlightShader.SetInt("sceneColorsTexture", 0);
+	highlightShader.SetInt("highlightTexture", 1);
+	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	static GLuint binaryImageClearValue = 0;
+	static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+	glClearBufferfv(GL_COLOR, 0, &clear_color.x);
+
+	glColorMaski(1, 0xFF, 0xFF, 0xFF, 0xFF); // ensure the texture used for highlighting can be cleared
+	glClearBufferuiv(GL_COLOR, 1, &binaryImageClearValue);
+
+	glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	//RenderBoundingBox(sceneBoundingBox, projection * view);
 
@@ -367,17 +461,11 @@ void Scene::UpdateAndRender(const Input& input)
 				if (entityAnim.rotations.values.size() > 0) entity.transform.rotation = SampleAt(entityAnim.rotations, normalizedTime);
 				if (entityAnim.weights.values.size() > 0) entity.morphTargetWeights = SampleWeightsAt(entityAnim.weights, normalizedTime);
 			}
-
 		}
 	}
 
 	RenderUI();
-
-	if (input.windowWidth != 0 && input.windowHeight != 0)
-	{
-		const float aspectRatio = (float)input.windowWidth / (float)input.windowHeight;
-		Render(aspectRatio);
-	}
+	Render(input.windowWidth, input.windowHeight);
 }
 
 void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection, bool parentHighlighted)
@@ -385,11 +473,11 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 	bool highlight = parentHighlighted || selectedEntityName == entity.name;
 	if (highlight)
 	{
-		highlight = true;
-		glEnable(GL_STENCIL_TEST);
-		glStencilFunc(GL_ALWAYS, 1, 0xFF); 
-		glStencilMask(0xFF);
-		glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+		glColorMaski(1, 0xFF, 0xFF, 0xFF, 0xFF);
+	}
+	else
+	{
+		glColorMaski(1, 0x00, 0x00, 0x00, 0x00);
 	}
 	glm::mat4 globalTransform = parentTransform * entity.transform.GetMatrix();
 	glm::mat4 modelView = view * globalTransform;
@@ -475,50 +563,6 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 			{
 				glDrawArrays(GL_TRIANGLES, 0, submesh.countVerticesOrIndices);
 			}
-			
-			if (highlight)
-			{
-				Shader& highlightShader = resources.GetOrCreateHighlightShader(submesh.flags);
-				highlightShader.use();
-				glm::mat4 highlightObjModelView = glm::scale(modelView, glm::vec3(1.1f, 1.1f, 1.1f));
-				highlightShader.SetMat4("modelView", glm::value_ptr(highlightObjModelView));
-				highlightShader.SetMat4("projection", glm::value_ptr(projection));
-				bool hasNormals = HasFlag(submesh.flags, VertexAttribute::NORMAL);
-				if (hasNormals)
-				{
-					glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelView)));
-					highlightShader.SetMat3("normalMatrixVS", glm::value_ptr(normalMatrix));
-					highlightShader.SetVec3("pointLight.positionVS", glm::vec3(0.0f, 0.0f, 0.0f));
-					highlightShader.SetVec3("pointLight.color", glm::vec3(0.5f, 0.5f, 0.5f));
-				}
-				if (entity.skeletonIdx >= 0)
-				{
-					auto skinningMatrices = ComputeSkinningMatrices(skeletons[entity.skeletonIdx], entities);
-					highlightShader.SetMat4("skinningMatrices", glm::value_ptr(skinningMatrices.front()), (int)skinningMatrices.size());
-				}
-				bool hasMorphTargets = HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET0_POSITION);
-				if (hasMorphTargets)
-				{
-					shader.SetFloat("morph1Weight", entity.morphTargetWeights[0]);
-					shader.SetFloat("morph2Weight", entity.morphTargetWeights[1]);
-				}
-
-				glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
-				glStencilMask(0x00);
-
-				if (submesh.hasIndexBuffer)
-				{
-					glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, nullptr);
-				}
-				else
-				{
-					glDrawArrays(GL_TRIANGLES, 0, submesh.countVerticesOrIndices);
-				}
-
-				glDisable(GL_STENCIL_TEST);
-				glEnable(GL_DEPTH_TEST);
-				glStencilMask(0xFF);
-			}
 		}
 
 		//RenderBoundingBox(entityMesh.boundingBox, projection * modelView);
@@ -549,7 +593,7 @@ void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform,
 
 	for (int childIndex : entity.children)
 	{
-		RenderEntity(entities[childIndex], globalTransform, view, projection);
+		RenderEntity(entities[childIndex], globalTransform, view, projection, highlight);
 	}
 }
 

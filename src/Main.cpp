@@ -11,8 +11,8 @@
 #include <iostream>
 #include "Scene.h"
 
-int windowWidth = 1920;
-int windowHeight = 1080;
+int windowWidth = 800;
+int windowHeight = 600;
 int selectedModelIndex = 0;
 
 void FramebufferSizeCallback(GLFWwindow*, int width, int height)
@@ -117,7 +117,7 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
     }
 
     assert(model.scenes.size() == 1); // cba
-    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model));
+    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model, windowWidth, windowHeight));
     return &pair.first->second;
 }
 
@@ -234,9 +234,11 @@ int main(int argc, char** argv)
         // Rendering
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, display_w, display_h);
-        glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+        
 
         auto sceneIter = sampleModels.find(sampleModelNames[selectedModelIndex]);
         if (sceneIter != sampleModels.end())

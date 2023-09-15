@@ -13,11 +13,11 @@
 class Scene
 {
 public:
-	Scene(const tinygltf::Scene& scene, const tinygltf::Model& model);
+	Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int windowWidth, int windowHeight);
 	void UpdateAndRender(const Input& input);
 	float time = 0.0f; // TODO: remove
 private:
-	void Render(float aspectRatio);
+	void Render(int windowWidth, int windowHeight);
 	void RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection, bool parentHighlighted = false);
 	void RenderUI();
 	void RenderHierarchyUI(const Entity& entity);
@@ -33,10 +33,16 @@ private:
 	std::string selectedEntityName;
 	GLuint boundingBoxVAO;
 	Shader boundingBoxShader = Shader("Shaders/bbox.vert", "Shaders/bbox.frag");
-	Shader highlightShader = Shader("Shaders/default.vert", "Shaders/highlight.frag");
+	Shader highlightShader = Shader("Shaders/fullscreen.vert", "Shaders/highlight.frag");
 	BBox sceneBoundingBox = {
 		.minXYZ = glm::vec3(FLT_MAX),
 		.maxXYZ = glm::vec3(-FLT_MAX),
 	};
+	GLuint fbo;
+	GLuint fullscreenQuadVAO;
+	GLuint colorTexture;
+	GLuint highlightTexture;
+	GLuint depthStencilRBO;
+	int texW, texH;
 	bool firstFrame = true;
 };
