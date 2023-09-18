@@ -56,11 +56,24 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 		const tinygltf::Image& image = model.images[texture.source];
 
 		int numComponents = image.component;
+		GLenum internalFormat;
 		GLenum format;
-		if (numComponents == 1) format = GL_RED;
-		if (numComponents == 2) format = GL_RG;
-		else if (numComponents == 3) format = GL_RGB;
-		else if (numComponents == 4) format = GL_RGBA;
+		if (numComponents == 1) {
+			internalFormat = GL_RED;
+			format = GL_RED;
+		}
+		if (numComponents == 2) {
+			internalFormat = GL_RG;
+			format = GL_RG;
+		}
+		else if (numComponents == 3) {
+			internalFormat = GL_SRGB;
+			format = GL_RGB;
+		}
+		else if (numComponents == 4) {
+			internalFormat = GL_SRGB_ALPHA;
+			format = GL_RGBA;
+		}
 		else
 		{
 			std::cout << "Unsupported number of components: " << numComponents << " from file " << image.uri << '\n';
@@ -72,7 +85,7 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 
 		glGenTextures(1, &addedTexture.id);
 		glBindTexture(GL_TEXTURE_2D, addedTexture.id);
-		glTexImage2D(GL_TEXTURE_2D, 0, format, image.width, image.height, 0, format, image.pixel_type, image.image.data());
+		glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, image.width, image.height, 0, format, image.pixel_type, image.image.data());
 		glGenerateMipmap(GL_TEXTURE_2D);
 
 		if (texture.sampler >= 0)

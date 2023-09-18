@@ -11,8 +11,8 @@
 #include <iostream>
 #include "Scene.h"
 
-int windowWidth = 800;
-int windowHeight = 600;
+int windowWidth = 1920;
+int windowHeight = 1080;
 int selectedModelIndex = 0;
 
 void FramebufferSizeCallback(GLFWwindow*, int width, int height)
