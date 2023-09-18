@@ -268,7 +268,7 @@ int main(int argc, char** argv)
     GLuint colorTexture;
     glGenTextures(1, &colorTexture);
     glBindTexture(GL_TEXTURE_2D, colorTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texW, texH, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, texW, texH, 0, GL_RGBA, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
@@ -300,7 +300,7 @@ int main(int argc, char** argv)
     }
     Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO);
 
-    
+    Shader highlightShader = Shader("Shaders/fullscreen.vert", "Shaders/highlight.frag");
 
     while (!glfwWindowShouldClose(window))
     {
@@ -340,6 +340,16 @@ int main(int argc, char** argv)
 
         ImGui::End();
 
+
+        if (selectedScene)
+        {
+            ImGui::Begin("Lighting");   
+            ImGui::SliderFloat("Exposure", &selectedScene->exposure, 0.0f, 10.0f);
+            ImGui::End();
+        }
+
+
+
         // Rendering
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -363,6 +373,32 @@ int main(int argc, char** argv)
         {
             selectedScene->UpdateAndRender(input);
         }
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, windowWidth, windowHeight);
+        glBindVertexArray(fullscreenQuadVAO);
+        highlightShader.use();
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, colorTexture);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, highlightTexture);
+        highlightShader.SetInt("sceneColorsTexture", 0);
+        highlightShader.SetInt("highlightTexture", 1);
+        if (selectedScene) highlightShader.SetFloat("exposure", selectedScene->exposure);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        static GLuint binaryImageClearValue = 0;
+        static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+        glClearBufferfv(GL_COLOR, 0, &clear_color.x);
+
+        glColorMaski(1, 0xFF, 0xFF, 0xFF, 0xFF); // ensure the texture used for highlighting can be cleared
+        glClearBufferuiv(GL_COLOR, 1, &binaryImageClearValue);
+
+        glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

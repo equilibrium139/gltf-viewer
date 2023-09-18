@@ -20,6 +20,7 @@ public:
 		GLuint depthStencilRBO);
 	void UpdateAndRender(const Input& input);
 	float time = 0.0f; // TODO: remove
+	float exposure = 1.0f;
 private:
 	void Render(int windowWidth, int windowHeight);
 	void RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection, bool parentHighlighted = false);
@@ -37,7 +38,6 @@ private:
 	std::string selectedEntityName;
 	GLuint boundingBoxVAO;
 	Shader boundingBoxShader = Shader("Shaders/bbox.vert", "Shaders/bbox.frag");
-	Shader highlightShader = Shader("Shaders/fullscreen.vert", "Shaders/highlight.frag");
 	BBox sceneBoundingBox = {
 		.minXYZ = glm::vec3(FLT_MAX),
 		.maxXYZ = glm::vec3(-FLT_MAX),

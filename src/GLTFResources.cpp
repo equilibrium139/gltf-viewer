@@ -1,5 +1,6 @@
 #include "GLTFResources.h"
 
+#include <iostream>
 #include <glad/glad.h>
 #include <string>
 #include <tuple>
@@ -44,6 +45,11 @@ static std::vector<std::string> GetShaderDefines(VertexAttribute flags, bool fla
 
 GLTFResources::GLTFResources(const tinygltf::Model& model)
 {
+	for (const auto& extension : model.extensionsUsed)
+	{
+		std::cout << extension << '\n';
+	}
+
 	for (const tinygltf::Mesh& mesh : model.meshes)
 	{
 		meshes.emplace_back(mesh, model);

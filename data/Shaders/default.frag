@@ -143,8 +143,6 @@ void main()
     vec3 color = geometryTerm * radiance * (kD * baseColor.rgb / PI + specular);
     vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;
     color += ambient;
-    color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0 / 2.2));
     fragColor = vec4(color, baseColor.a);
 #else
     fragColor = vec4(1.0, 0.0, 0.0, 1.0);
