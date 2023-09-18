@@ -13,7 +13,11 @@
 class Scene
 {
 public:
-	Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int windowWidth, int windowHeight);
+	Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int windowWidth, int windowHeight, GLuint fbo,
+		GLuint fullscreenQuadVAO,
+		GLuint colorTexture,
+		GLuint highlightTexture,
+		GLuint depthStencilRBO);
 	void UpdateAndRender(const Input& input);
 	float time = 0.0f; // TODO: remove
 private:

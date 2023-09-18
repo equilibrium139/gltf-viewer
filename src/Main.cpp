@@ -92,7 +92,11 @@ void ProcessInput(GLFWwindow* window, Input& outInput, const ImGuiIO& io)
     }
 }
 
-Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, Scene>& scenes)
+Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, Scene>& scenes, GLuint fbo,
+    GLuint fullscreenQuadVAO,
+    GLuint colorTexture,
+    GLuint highlightTexture,
+    GLuint depthStencilRBO)
 {
     std::string filepath = "C:\\dev\\gltf-models\\" + modelName + "\\glTF\\" + modelName + ".gltf";
     tinygltf::Model model;
@@ -117,7 +121,7 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
     }
 
     assert(model.scenes.size() == 1); // cba
-    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model, windowWidth, windowHeight));
+    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model, windowWidth, windowHeight, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO));
     return &pair.first->second;
 }
 
@@ -187,11 +191,116 @@ int main(int argc, char** argv)
     float previousFrameTime = 0.0f;
     float currentFrameTime = 0.0f;
 
+    GLfloat vertices[] = {
+        // Outline vertices
+        -0.5f, -0.5f, -0.5f,
+         0.5f, -0.5f, -0.5f,
+         0.5f, -0.5f,  0.5f,
+        -0.5f, -0.5f,  0.5f,
+        -0.5f,  0.5f, -0.5f,
+         0.5f,  0.5f, -0.5f,
+         0.5f,  0.5f,  0.5f,
+        -0.5f,  0.5f,  0.5f
+    };
+
+    GLushort indices[] = {
+        // Outline edges
+        0, 1, 1, 2, 2, 3, 3, 0,  // Bottom face
+        4, 5, 5, 6, 6, 7, 7, 4,  // Top face
+        0, 4, 1, 5, 2, 6, 3, 7   // Vertical edges
+    };
+
+    GLuint boundingBoxVAO;
+    glGenVertexArrays(1, &boundingBoxVAO);
+    glBindVertexArray(boundingBoxVAO);
+
+    GLuint boundingBoxVBO;
+    glGenBuffers(1, &boundingBoxVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, boundingBoxVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 12, 0);
+
+    GLuint boundingBoxIBO;
+    glGenBuffers(1, &boundingBoxIBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, boundingBoxIBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+    GLfloat quadVertices[] = {
+        -1.0f, -1.0f, 0.0f, 0.0f,
+        1.0f, -1.0f, 1.0f, 0.0f,
+        1.0f, 1.0f, 1.0f, 1.0f,
+        -1.0f, 1.0f, 0.0f, 1.0f
+    };
+
+    GLuint quadIndices[] = {
+        0, 1, 2,
+        2, 3, 0
+    };
+
+    GLuint fullscreenQuadVAO;
+    glGenVertexArrays(1, &fullscreenQuadVAO);
+    glBindVertexArray(fullscreenQuadVAO);
+
+    GLuint quadVBO;
+    glGenBuffers(1, &quadVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 16, 0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 16, (void*)8);
+
+    GLuint quadIBO;
+    glGenBuffers(1, &quadIBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, quadIBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(quadIndices), quadIndices, GL_STATIC_DRAW);
+
+    GLuint fbo;
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+    glViewport(0, 0, windowWidth, windowHeight);
+
+    int texW = windowWidth;
+    int texH = windowHeight;
+
+    GLuint colorTexture;
+    glGenTextures(1, &colorTexture);
+    glBindTexture(GL_TEXTURE_2D, colorTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texW, texH, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
+
+    GLuint depthStencilRBO;
+    glGenRenderbuffers(1, &depthStencilRBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, depthStencilRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, texW, texH);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencilRBO);
+
+    GLuint highlightTexture;
+    glGenTextures(1, &highlightTexture);
+    glBindTexture(GL_TEXTURE_2D, highlightTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, texW, texH, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, highlightTexture, 0);
+
+    static const GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
+    glDrawBuffers(2, drawBuffers); // this is framebuffer state so we only need to set it once
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
     while (sampleModelNames[selectedModelIndex] != "InterpolationTest")
     {
         selectedModelIndex++;
     }
-    Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels);
+    Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO);
+
+    
 
     while (!glfwWindowShouldClose(window))
     {
@@ -247,7 +356,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels);
+            selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO);
         }
 
         if (selectedScene)
