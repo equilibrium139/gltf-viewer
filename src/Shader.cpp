@@ -7,6 +7,11 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
 	unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
 
+	std::string defaultDefinesString;
+	defaultDefinesString += "#define MAX_NUM_POINT_LIGHTS " + std::to_string(maxPointLights) + "\n";
+	defaultDefinesString += "#define MAX_NUM_SPOT_LIGHTS " + std::to_string(maxSpotLights) + "\n";
+	defaultDefinesString += "#define MAX_NUM_DIR_LIGHTS " + std::to_string(maxDirLights) + "\n";
+
 	auto vertexSource = get_file_contents(vertexPath);
 	auto fragmentSource = get_file_contents(fragmentPath);
 
@@ -19,13 +24,11 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 		definesString += "#define " + define + "\n";
 	}
 
-	std::cout << definesString << '\n';
+	const char* vShaderSources[4] = { version.c_str(), definesString.c_str(), defaultDefinesString.c_str(),  vShaderCode};
+	const char* fShaderSources[4] = { version.c_str(), definesString.c_str(), defaultDefinesString.c_str(), fShaderCode};
 
-	const char* vShaderSources[3] = { version.c_str(), definesString.c_str(), vShaderCode};
-	const char* fShaderSources[3] = { version.c_str(), definesString.c_str(), fShaderCode};
-
-	glShaderSource(vertexShader, 3, vShaderSources, NULL);
-	glShaderSource(fragmentShader, 3, fShaderSources, NULL);
+	glShaderSource(vertexShader, 4, vShaderSources, NULL);
+	glShaderSource(fragmentShader, 4, fShaderSources, NULL);
 
 	glCompileShader(vertexShader);
 
@@ -36,6 +39,7 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	{
 		glGetShaderInfoLog(vertexShader, sizeof(infoLog), NULL, infoLog);
 		std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << '\n';
+		//std::cout << "Vertex shader source:\n" << version + defaultDefinesString + definesString + vShaderCode;
 		// TODO find a solution for this. It's affecting the next Shader object created
 		// when this one fails
 	}
@@ -46,6 +50,7 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	{
 		glGetShaderInfoLog(fragmentShader, sizeof(infoLog), NULL, infoLog);
 		std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << '\n';
+		//std::cout << "Fragment shader source:\n" << version + defaultDefinesString + definesString + fShaderCode;
 	}
 
 	id = glCreateProgram();
@@ -75,6 +80,8 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	{
 		glGetProgramInfoLog(id, sizeof(infoLog), NULL, infoLog);
 		std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << '\n';
+		std::cout << "Vertex shader source:\n" << version + defaultDefinesString + definesString + vShaderCode << '\n';
+		std::cout << "Fragment shader source:\n" << version + defaultDefinesString + definesString + fShaderCode << '\n';
 	}
 
 	glDeleteShader(vertexShader);
@@ -83,8 +90,8 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	use();
 	for (const auto& binding : ub_bindings)
 	{
-		auto block_index = glGetUniformBlockIndex(id, binding.uniform_block_name.c_str());
-		glUniformBlockBinding(id, block_index, binding.uniform_block_binding);
+		auto block_index = glGetUniformBlockIndex(id, binding.uniformBlockName.c_str());
+		glUniformBlockBinding(id, block_index, binding.uniformBlockBinding);
 	}
 }
 

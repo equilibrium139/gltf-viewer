@@ -50,6 +50,14 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 		std::cout << extension << '\n';
 	}
 
+	// TODO: add lights to scene
+	auto iter = model.extensions.find("KHR_lights_punctual");
+
+	if (iter != model.extensions.end())
+	{
+		std::cout << model.scenes[model.defaultScene].name << '\n';
+	}
+
 	for (const tinygltf::Mesh& mesh : model.meshes)
 	{
 		meshes.emplace_back(mesh, model);
@@ -127,20 +135,12 @@ Shader& GLTFResources::GetOrCreateShader(VertexAttribute attributes, bool flatSh
 		}
 	}
 	auto defines = GetShaderDefines(attributes, flatShading);
-	shaders.push_back({ { attributes, flatShading }, Shader("Shaders/default.vert", "Shaders/default.frag", nullptr, {}, defines) });
-	return shaders.back().second;
-}
-
-Shader& GLTFResources::GetOrCreateHighlightShader(VertexAttribute attributes)
-{
-	for (auto& pair : highlightShaders)
-	{
-		if (attributes == pair.first)
+	shaders.push_back({ { attributes, flatShading }, Shader("Shaders/default.vert", "Shaders/default.frag", nullptr,  
 		{
-			return pair.second;
-		}
-	}
-	auto defines = GetShaderDefines(attributes, false);
-	highlightShaders.push_back({ attributes, Shader("Shaders/default.vert", "Shaders/highlight.frag", nullptr, {}, defines) });
-	return highlightShaders.back().second;
+			{
+				.uniformBlockName = "Lights",
+				.uniformBlockBinding = 1
+			},
+		}, defines)});
+	return shaders.back().second;
 }

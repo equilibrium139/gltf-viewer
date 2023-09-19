@@ -5,6 +5,7 @@
 #include "Entity.h"
 #include "GLTFResources.h"
 #include "Input.h"
+#include "Light.h"
 #include "Shader.h"
 #include "Skeleton.h"
 #include "tiny_gltf/tiny_gltf.h"
@@ -17,7 +18,8 @@ public:
 		GLuint fullscreenQuadVAO,
 		GLuint colorTexture,
 		GLuint highlightTexture,
-		GLuint depthStencilRBO);
+		GLuint depthStencilRBO,
+		GLuint lightsUBO);
 	void UpdateAndRender(const Input& input);
 	float time = 0.0f; // TODO: remove
 	float exposure = 1.0f;
@@ -31,6 +33,9 @@ private:
 	std::vector<Entity> entities;
 	std::vector<Skeleton> skeletons;
 	std::vector<Camera> cameras;
+	std::vector<PointLight> pointLights;
+	std::vector<SpotLight> spotLights;
+	std::vector<DirectionalLight> dirLights;
 	std::vector<std::uint8_t> animationEnabled; // avoiding vector<bool> to allow imgui to have bool references to elements 
 	Camera controllableCamera;
 	Camera* currentCamera = &controllableCamera;
@@ -47,6 +52,7 @@ private:
 	GLuint colorTexture;
 	GLuint highlightTexture;
 	GLuint depthStencilRBO;
+	GLuint lightsUBO;
 	int texW, texH;
 	bool firstFrame = true;
 };

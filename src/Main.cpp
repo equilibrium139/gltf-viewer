@@ -96,7 +96,8 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
     GLuint fullscreenQuadVAO,
     GLuint colorTexture,
     GLuint highlightTexture,
-    GLuint depthStencilRBO)
+    GLuint depthStencilRBO,
+    GLuint lightsUBO)
 {
     std::string filepath = "C:\\dev\\gltf-models\\" + modelName + "\\glTF\\" + modelName + ".gltf";
     tinygltf::Model model;
@@ -121,7 +122,7 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
     }
 
     assert(model.scenes.size() == 1); // cba
-    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model, windowWidth, windowHeight, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO));
+    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model, windowWidth, windowHeight, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO));
     return &pair.first->second;
 }
 
@@ -294,13 +295,19 @@ int main(int argc, char** argv)
         std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+    GLuint lightsUBO;
+    glGenBuffers(1, &lightsUBO);
+    glBindBuffer(GL_UNIFORM_BUFFER, lightsUBO);
+    glBufferData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight) + Shader::maxSpotLights * sizeof(SpotLight) + Shader::maxDirLights * sizeof(DirectionalLight) + 3 * sizeof(int), NULL, GL_STATIC_DRAW);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, lightsUBO);
+
     while (sampleModelNames[selectedModelIndex] != "InterpolationTest")
     {
         selectedModelIndex++;
     }
-    Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO);
+    Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO);
 
-    Shader highlightShader = Shader("Shaders/fullscreen.vert", "Shaders/highlight.frag");
+    Shader postprocessShader = Shader("Shaders/fullscreen.vert", "Shaders/postprocess.frag");
 
     while (!glfwWindowShouldClose(window))
     {
@@ -348,8 +355,6 @@ int main(int argc, char** argv)
             ImGui::End();
         }
 
-
-
         // Rendering
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);
@@ -366,7 +371,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO);
+            selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO);
         }
 
         if (selectedScene)
@@ -377,14 +382,14 @@ int main(int argc, char** argv)
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glViewport(0, 0, windowWidth, windowHeight);
         glBindVertexArray(fullscreenQuadVAO);
-        highlightShader.use();
+        postprocessShader.use();
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, colorTexture);
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_2D, highlightTexture);
-        highlightShader.SetInt("sceneColorsTexture", 0);
-        highlightShader.SetInt("highlightTexture", 1);
-        if (selectedScene) highlightShader.SetFloat("exposure", selectedScene->exposure);
+        postprocessShader.SetInt("sceneColorsTexture", 0);
+        postprocessShader.SetInt("highlightTexture", 1);
+        if (selectedScene) postprocessShader.SetFloat("exposure", selectedScene->exposure);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);

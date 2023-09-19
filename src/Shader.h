@@ -9,19 +9,21 @@
 #include <unordered_map>
 #include <vector>
 
-//#include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 struct UniformBlockBinding
 {
-	std::string uniform_block_name;
-	GLuint uniform_block_binding;
+	std::string uniformBlockName;
+	GLuint uniformBlockBinding;
 };
 
 class Shader
 {
 public:
 	unsigned int id;
+	static constexpr int maxPointLights = 25;
+	static constexpr int maxSpotLights = 25;
+	static constexpr int maxDirLights = 5;
 	Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath = nullptr, const std::vector<UniformBlockBinding>& ub_bindings = {},
 		const std::vector<std::string> defines = {});
 

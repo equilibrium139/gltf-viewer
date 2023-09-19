@@ -5,8 +5,42 @@
 
 struct PointLight
 {
-    vec3 positionVS;
     vec3 color;
+    float range;
+    vec3 positionVS;
+    float intensity;
+};
+
+struct DirectionalLight
+{
+    vec3 color;
+	float intensity;
+	vec3 direction;
+};
+
+struct SpotLight
+{
+    vec3 color;
+	float range;
+	vec3 positionVS;
+	float angleScale;
+	vec3 direction;
+	float angleOffset;
+    float intensity;
+};
+
+// These are now defined in C++
+// #define MAX_NUM_POINT_LIGHTS 25
+// #define MAX_NUM_SPOT_LIGHTS 25
+// #define MAX_NUM_DIR_LIGHTS 5
+
+layout (std140) uniform Lights {
+    PointLight pointLight[MAX_NUM_POINT_LIGHTS];
+    SpotLight spotLight[MAX_NUM_SPOT_LIGHTS];
+    DirectionalLight dirLight[MAX_NUM_DIR_LIGHTS];
+    int numPointLights;
+    int numSpotLights;
+    int numDirLights;
 };
 
 struct Material
@@ -23,7 +57,6 @@ struct Material
 };
 
 uniform Material material;
-uniform PointLight pointLight;
 
 float DistributionGGX(vec3 N, vec3 H, float roughness)
 {
@@ -108,8 +141,7 @@ void main()
 #endif // HAS_NORMALS
     
 #if defined(HAS_NORMALS) || defined(FLAT_SHADING)
-    vec3 surfaceToCamera = -normalize(surfacePosVS);
-    vec3 surfaceToLight = normalize(pointLight.positionVS - surfacePosVS);
+
     #ifdef HAS_TEXCOORD
         vec4 baseColor = texture(material.baseColorTexture, texCoords) * material.baseColorFactor;
         vec2 metallicRoughness = texture(material.metallicRoughnessTexture, texCoords).gb * vec2(material.metallicFactor, material.roughnessFactor);
@@ -122,28 +154,97 @@ void main()
     #ifdef HAS_VERTEX_COLORS
         baseColor = baseColor * vertexColor;
     #endif // HAS_VERTEX_COLORS
+
+    vec3 surfaceToCamera = -normalize(surfacePosVS);
     float metallic = metallicRoughness.x;
     float roughness = metallicRoughness.y;
     vec3 F0 = vec3(0.04); 
     F0 = mix(F0, baseColor.rgb, metallic);
-    vec3 H = normalize(surfaceToCamera + surfaceToLight);
-    float surfaceToLightDistance = length(pointLight.positionVS - surfacePosVS);
-    float attenuation = 1.0 / (surfaceToLightDistance * surfaceToLightDistance);
-    vec3 radiance = pointLight.color * attenuation;
-    float NDF = DistributionGGX(unitNormal, H, roughness);
-    float G = GeometrySmith(unitNormal, surfaceToCamera, surfaceToLight, roughness);
-    vec3 F = fresnelSchlick(max(dot(H, surfaceToCamera), 0.0), F0);
-    vec3 kS = F;
-    vec3 kD = vec3(1.0) - kS;
-    kD *= 1.0 - metallic;
-    vec3 numerator = NDF * G * F;
-    float denominator = 4.0 * max(dot(unitNormal, surfaceToCamera), 0.0) * max(dot(unitNormal, surfaceToLight), 0.0) + 0.0001;
-    vec3 specular = numerator / denominator;
-    float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
-    vec3 color = geometryTerm * radiance * (kD * baseColor.rgb / PI + specular);
-    vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;
-    color += ambient;
-    fragColor = vec4(color, baseColor.a);
+
+    vec3 finalColor = vec3(0.0);
+
+    for (int i = 0; i < numPointLights; i++) {
+        // PointLight light = pointLight[i];
+        float surfaceToLightDistance = length(pointLight[i].positionVS - surfacePosVS);
+        if (surfaceToLightDistance > pointLight[i].range) {
+            continue;
+        }
+        vec3 surfaceToLight = normalize(pointLight[i].positionVS - surfacePosVS);
+        vec3 H = normalize(surfaceToCamera + surfaceToLight);
+        float attenuation = 1.0 / (surfaceToLightDistance * surfaceToLightDistance);
+        vec3 radiance = pointLight[i].color * attenuation * pointLight[i].intensity;
+        float NDF = DistributionGGX(unitNormal, H, roughness);  
+        float G = GeometrySmith(unitNormal, surfaceToCamera, surfaceToLight, roughness);
+        vec3 F = fresnelSchlick(max(dot(H, surfaceToCamera), 0.0), F0);
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+        kD *= 1.0 - metallic;
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(dot(unitNormal, surfaceToCamera), 0.0) * max(dot(unitNormal, surfaceToLight), 0.0) + 0.0001;
+        vec3 specular = numerator / denominator;
+        float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
+        vec3 color = geometryTerm * radiance * (kD * baseColor.rgb / PI + specular);
+        vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;
+        color += ambient;
+        finalColor += color;
+    }
+
+    for (int i = 0; i < numSpotLights; i++)
+    {
+        SpotLight light = spotLight[i];
+        float surfaceToLightDistance = length(light.positionVS - surfacePosVS);
+        if (surfaceToLightDistance > light.range) {
+            continue;
+        }
+        vec3 surfaceToLight = normalize(light.positionVS - surfacePosVS);
+        vec3 H = normalize(surfaceToCamera + surfaceToLight);
+        float distanceAttenuation = 1.0 / (surfaceToLightDistance * surfaceToLightDistance);
+        // https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md#inner-and-outer-cone-angles
+        float cosLightSurfaceAngle = dot(light.direction, -surfaceToLight);
+        float angularAttenuation = clamp(cosLightSurfaceAngle * light.angleScale + light.angleOffset, 0.0, 1.0);
+        angularAttenuation *= angularAttenuation;
+        vec3 radiance = light.color * distanceAttenuation * angularAttenuation * light.intensity;
+        float NDF = DistributionGGX(unitNormal, H, roughness);  
+        float G = GeometrySmith(unitNormal, surfaceToCamera, surfaceToLight, roughness);
+        vec3 F = fresnelSchlick(max(dot(H, surfaceToCamera), 0.0), F0);
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+        kD *= 1.0 - metallic;
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(dot(unitNormal, surfaceToCamera), 0.0) * max(dot(unitNormal, surfaceToLight), 0.0) + 0.0001;
+        vec3 specular = numerator / denominator;
+        float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
+        vec3 color = geometryTerm * radiance * (kD * baseColor.rgb / PI + specular);
+        vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;
+        color += ambient;
+        finalColor += color;
+    }
+
+    for (int i = 0; i < numDirLights; i++)
+    {
+        DirectionalLight light = dirLight[i];
+        vec3 surfaceToLight = -light.direction;
+        vec3 H = normalize(surfaceToCamera + surfaceToLight);
+        // https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md#inner-and-outer-cone-angles
+        float cosLightSurfaceAngle = dot(light.direction, surfaceToLight);
+        vec3 radiance = light.color * light.intensity;
+        float NDF = DistributionGGX(unitNormal, H, roughness);  
+        float G = GeometrySmith(unitNormal, surfaceToCamera, surfaceToLight, roughness);
+        vec3 F = fresnelSchlick(max(dot(H, surfaceToCamera), 0.0), F0);
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+        kD *= 1.0 - metallic;
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(dot(unitNormal, surfaceToCamera), 0.0) * max(dot(unitNormal, surfaceToLight), 0.0) + 0.0001;
+        vec3 specular = numerator / denominator;
+        float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
+        vec3 color = geometryTerm * radiance * (kD * baseColor.rgb / PI + specular);
+        vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;
+        color += ambient;
+        finalColor += color;
+    }
+
+    fragColor = vec4(finalColor, baseColor.a);
 #else
     fragColor = vec4(1.0, 0.0, 0.0, 1.0);
 #endif // HAS_NORMALS

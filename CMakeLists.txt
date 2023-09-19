@@ -18,6 +18,7 @@ src/GLTFHelpers.cpp
 src/GLTFResources.cpp
 src/GLTFResources.h
 src/Input.h
+src/Light.h
 src/Mesh.cpp
 src/Mesh.h
 src/mikktspace.cpp

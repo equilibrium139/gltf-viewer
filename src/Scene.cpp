@@ -11,10 +11,20 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 	GLuint fullscreenQuadVAO,
 	GLuint colorTexture,
 	GLuint highlightTexture,
-	GLuint depthStencilRBO)
-	:resources(model), fbo(fbo), fullscreenQuadVAO(fullscreenQuadVAO), colorTexture(colorTexture), highlightTexture(highlightTexture), depthStencilRBO(depthStencilRBO), texW(windowWidth), texH(windowHeight)
+	GLuint depthStencilRBO,
+	GLuint lightsUBO)
+	:resources(model), fbo(fbo), fullscreenQuadVAO(fullscreenQuadVAO), colorTexture(colorTexture), highlightTexture(highlightTexture), depthStencilRBO(depthStencilRBO), texW(windowWidth), texH(windowHeight), lightsUBO(lightsUBO)
 {
 	assert(model.scenes.size() == 1); // for now
+
+	PointLight p(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 3.0f, 0.0f), 10.0f, 10.0f);
+	pointLights.push_back(p);
+
+	SpotLight s(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.5f, 2.0f), glm::vec3(0.0f, 0.0f, -1.0f), 20.0f, 10.0f, 50.0f, 50.0f);
+	spotLights.push_back(s);
+
+	DirectionalLight d(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f), 100.0f);
+	dirLights.push_back(d);
 
 	int defaultEntityNameSuffix = 0;
 	
@@ -238,11 +248,58 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 void Scene::Render(int windowWidth, int windowHeight)
 {
 	const auto view = currentCamera->GetViewMatrix();
-	const float aspectRatio = (float)windowWidth / (float)windowHeight;
+	const float aspectRatio = windowHeight > 0 ? (float)windowWidth / (float)windowHeight : 1.0f;
 	const auto projection = currentCamera->GetProjectionMatrix(aspectRatio);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glViewport(0, 0, texW, texH);
+
+	const int numLights[3] = { pointLights.size(), spotLights.size(), dirLights.size() };
+	assert(numLights[0] <= Shader::maxPointLights && numLights[1] <= Shader::maxSpotLights && numLights[2] <= Shader::maxDirLights);
+	std::vector<PointLight> pointLightsViewSpace(pointLights);
+	for (int i = 0, count = pointLightsViewSpace.size(); i < count; i++)
+	{
+		auto& pointLightVS = pointLightsViewSpace[i];
+		pointLightVS.position = view * glm::vec4(pointLightVS.position, 1.0f);
+	}
+
+	// convert to angle scale and angle offset for ease of computation in shader
+	std::vector<SpotLight> spotLightsViewSpace(spotLights);
+	for (int i = 0, count = spotLightsViewSpace.size(); i < count; i++)
+	{
+		auto& spotLightVS = spotLightsViewSpace[i];
+		spotLightVS.position = view * glm::vec4(spotLightVS.position, 1.0f);
+
+		// https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md#inner-and-outer-cone-angles
+		const float cosInner = std::cos(glm::radians(spotLightVS.innerAngleCutoffDegrees));
+		const float cosOuter = std::cos(glm::radians(spotLightVS.outerAngleCutoffDegrees));
+		const float lightAngleScale = 1.0f / std::max(0.0001f, cosInner - cosOuter);
+		const float lightAngleOffset = -cosOuter * lightAngleScale;
+		spotLightVS.innerAngleCutoffDegrees = lightAngleScale;
+		spotLightVS.outerAngleCutoffDegrees = lightAngleOffset;
+
+		// We can convert the direction using the view matrix because it doesn't scale
+		spotLightVS.direction = view * glm::vec4(spotLightVS.direction, 0.0f);
+	}
+
+	std::vector<DirectionalLight> dirLightsViewSpace(dirLights);
+	for (int i = 0, count = dirLightsViewSpace.size(); i < count; i++)
+	{
+		auto& dirLightViewSpace = dirLightsViewSpace[i];
+		dirLightViewSpace.direction = view * glm::vec4(dirLightViewSpace.direction, 0.0f);
+	}
+
+	glBindBuffer(GL_UNIFORM_BUFFER, lightsUBO);
+	if (numLights[0] > 0) {
+		glBufferSubData(GL_UNIFORM_BUFFER, 0, numLights[0] * sizeof(PointLight), pointLightsViewSpace.data());
+	}
+	if (numLights[1] > 0) {
+		glBufferSubData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight), numLights[1] * sizeof(SpotLight), spotLightsViewSpace.data());
+	}
+	if (numLights[2] > 0) {
+		glBufferSubData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight) + Shader::maxSpotLights * sizeof(SpotLight), numLights[2] * sizeof(DirectionalLight), dirLightsViewSpace.data());
+	}
+	glBufferSubData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight) + Shader::maxSpotLights * sizeof(SpotLight) + Shader::maxDirLights * sizeof(DirectionalLight), sizeof(numLights), numLights);
 
 	for (const Entity& entity : entities)
 	{
