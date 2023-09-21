@@ -16,4 +16,5 @@ struct Entity
 	int skeletonIdx = -1;
 	int cameraIdx = -1;
 	std::vector<float> morphTargetWeights;
+	int lightIdx = -1;
 };

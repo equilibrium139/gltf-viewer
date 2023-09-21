@@ -50,14 +50,6 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 		std::cout << extension << '\n';
 	}
 
-	// TODO: add lights to scene
-	auto iter = model.extensions.find("KHR_lights_punctual");
-
-	if (iter != model.extensions.end())
-	{
-		std::cout << model.scenes[model.defaultScene].name << '\n';
-	}
-
 	for (const tinygltf::Mesh& mesh : model.meshes)
 	{
 		meshes.emplace_back(mesh, model);

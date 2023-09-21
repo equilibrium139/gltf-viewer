@@ -17,16 +17,10 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 {
 	assert(model.scenes.size() == 1); // for now
 
-	PointLight p(glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, 3.0f, 0.0f), 10.0f, 10.0f);
-	pointLights.push_back(p);
-
-	SpotLight s(glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.5f, 2.0f), glm::vec3(0.0f, 0.0f, -1.0f), 20.0f, 10.0f, 50.0f, 50.0f);
-	spotLights.push_back(s);
-
-	DirectionalLight d(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f), 100.0f);
-	dirLights.push_back(d);
-
 	int defaultEntityNameSuffix = 0;
+
+	// used to set light's entityIdx later
+	std::unordered_map<int, int> lightEntity;
 	
 	// Nodes
 	for (const auto& node : model.nodes)
@@ -58,7 +52,17 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 		{
 			entity.cameraIdx = node.camera;
 		}
+
+		auto lightsExtension = node.extensions.find("KHR_lights_punctual");
+		if (lightsExtension != node.extensions.end())
+		{
+			int lightIdx = lightsExtension->second.Get("light").GetNumberAsInt();
+			entity.lightIdx = lightIdx;
+			lightEntity[lightIdx] = entities.size() - 1;
+		}
 	}
+
+	globalTransforms.resize(entities.size());
 
 	// Set entity parent
 	for (int i = 0; i < entities.size(); i++)
@@ -243,67 +247,283 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			camera.far = gltfCamera.perspective.zfar;
 		}
 	}
+	
+	int lightIdx = 0;
+	for (const tinygltf::Light& gltfLight : model.lights)
+	{
+		glm::vec3 color = gltfLight.color.size() == 3 ? glm::vec3((float)gltfLight.color[0], (float)gltfLight.color[1], (float)gltfLight.color[2]) : glm::vec3(1.0f);
+
+		// TODO: implement this as bool indicating if light has infinite range?
+		const float gltfLightRange = gltfLight.range != 0.0 ? (float)gltfLight.range : FLT_MAX;
+
+		if (gltfLight.type == "point")
+		{
+			Light light{
+				.type = Light::Point,
+				.color = color,
+				.intensity = (float)gltfLight.intensity,
+				.range = gltfLightRange,
+				.entityIdx = lightEntity[lightIdx]
+			};
+			lights.push_back(light);
+		}
+		else if (gltfLight.type == "spot")
+		{
+			Light light{
+				.type = Light::Spot,
+				.color = color,
+				.intensity = (float)gltfLight.intensity,
+				.range = gltfLightRange,
+				.innerAngleCutoffDegrees = glm::degrees((float)gltfLight.spot.innerConeAngle),
+				.outerAngleCutoffDegrees = glm::degrees((float)gltfLight.spot.outerConeAngle),
+				.entityIdx = lightEntity[lightIdx]
+			};
+			lights.push_back(light);
+		}
+		else
+		{
+			assert(gltfLight.type == "directional");
+			Light light{
+				.type = Light::Directional,
+				.color = color,
+				.intensity = (float)gltfLight.intensity,
+				.entityIdx = lightEntity[lightIdx]
+			};
+			lights.push_back(light);
+		}
+		lightIdx++;
+	}
+
+	// add default lights if scene doesn't have lights
+	if (lights.size() == 0)
+	{
+		// TODO: sync entites and global transforms array in a cleaner way
+		int entityIdx = entities.size();
+		entities.emplace_back();
+		globalTransforms.emplace_back();
+		Entity& pointLightEntity = entities.back();
+		pointLightEntity.name = "DefaultPointLightEntity";
+		pointLightEntity.transform.translation = glm::vec3(0.0f, 3.0f, 0.0f);
+		pointLightEntity.transform.scale = glm::vec3(1.0f); // TODO: make lights independent of entity scale
+		Light pointLight{
+			.type = Light::Point, 
+			.color = glm::vec3(1.0f, 0.0f, 0.0f), 
+			.intensity = 50.0f,
+			.range = 50.0f,
+			.entityIdx = entityIdx
+		};
+		lights.push_back(pointLight);
+
+		entityIdx++;
+		entities.emplace_back();
+		globalTransforms.emplace_back();
+		Entity& spotLightEntity = entities.back();
+		spotLightEntity.name = "DefaultSpotLightEntity";
+		spotLightEntity.transform.translation = glm::vec3(0.0f, 0.5f, 5.0f);
+		spotLightEntity.transform.rotation = glm::quat(glm::vec3(0.0f, glm::radians(180.0f), 0.0f));
+		spotLightEntity.transform.scale = glm::vec3(1.0f);
+		Light spotLight{
+			.type = Light::Spot,
+			.color = glm::vec3(0.0f, 1.0f, 0.0f),
+			.intensity = 50.0f,
+			.range = 50.0f,
+			.innerAngleCutoffDegrees = 10.0f,
+			.outerAngleCutoffDegrees = 50.0f,
+			.entityIdx = entityIdx
+		};
+		lights.push_back(spotLight);
+
+		entityIdx++;
+		entities.emplace_back();
+		globalTransforms.emplace_back();
+		Entity& dirLightEntity = entities.back();
+		dirLightEntity.name = "DefaultDirectionalLightEntity";
+		dirLightEntity.transform.rotation = glm::quat(glm::vec3(glm::radians(90.0f), 0.0f, 0.0f));
+		dirLightEntity.transform.scale = glm::vec3(1.0f);
+		Light dirLight{
+			.type = Light::Directional,
+			.color = glm::vec3(0.0f, 0.0f, 1.0f),
+			.intensity = 100.0f,
+			.entityIdx = entityIdx
+		};
+		lights.push_back(dirLight);
+	}
 }
 
 void Scene::Render(int windowWidth, int windowHeight)
 {
+	UpdateGlobalTransforms();
+
 	const auto view = currentCamera->GetViewMatrix();
 	const float aspectRatio = windowHeight > 0 ? (float)windowWidth / (float)windowHeight : 1.0f;
 	const auto projection = currentCamera->GetProjectionMatrix(aspectRatio);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glViewport(0, 0, texW, texH);
-
-	const int numLights[3] = { pointLights.size(), spotLights.size(), dirLights.size() };
+	
+	std::int32_t numLights[3] = { 0, 0, 0 };
+	std::vector<PointLight> pointLights;
+	std::vector<SpotLight> spotLights;
+	std::vector<DirectionalLight> dirLights;
+	for (const Light& light : lights)
+	{
+		assert(light.entityIdx >= 0);
+		const glm::mat4& entityGlobalTransform = globalTransforms[light.entityIdx];
+		glm::vec3 lightPosVS = view * glm::vec4(glm::vec3(entityGlobalTransform[3]), 1.0f);
+		glm::vec3 lightDirVS = view * glm::vec4(glm::normalize(glm::vec3(entityGlobalTransform[2])), 0.0f);
+		switch (light.type) 
+		{
+		case Light::Point:
+			pointLights.emplace_back(light.color, lightPosVS, light.range, light.intensity);
+			numLights[0]++;
+			break;
+		case Light::Spot:
+			spotLights.emplace_back(light.color, lightPosVS, lightDirVS, light.range, light.innerAngleCutoffDegrees, light.outerAngleCutoffDegrees, light.intensity);
+			numLights[1]++;
+			break;
+		case Light::Directional:
+			dirLights.emplace_back(light.color, lightDirVS, light.intensity);
+			numLights[2]++;
+			break;
+		}
+	}
+	
 	assert(numLights[0] <= Shader::maxPointLights && numLights[1] <= Shader::maxSpotLights && numLights[2] <= Shader::maxDirLights);
-	std::vector<PointLight> pointLightsViewSpace(pointLights);
-	for (int i = 0, count = pointLightsViewSpace.size(); i < count; i++)
-	{
-		auto& pointLightVS = pointLightsViewSpace[i];
-		pointLightVS.position = view * glm::vec4(pointLightVS.position, 1.0f);
-	}
-
-	// convert to angle scale and angle offset for ease of computation in shader
-	std::vector<SpotLight> spotLightsViewSpace(spotLights);
-	for (int i = 0, count = spotLightsViewSpace.size(); i < count; i++)
-	{
-		auto& spotLightVS = spotLightsViewSpace[i];
-		spotLightVS.position = view * glm::vec4(spotLightVS.position, 1.0f);
-
-		// https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md#inner-and-outer-cone-angles
-		const float cosInner = std::cos(glm::radians(spotLightVS.innerAngleCutoffDegrees));
-		const float cosOuter = std::cos(glm::radians(spotLightVS.outerAngleCutoffDegrees));
-		const float lightAngleScale = 1.0f / std::max(0.0001f, cosInner - cosOuter);
-		const float lightAngleOffset = -cosOuter * lightAngleScale;
-		spotLightVS.innerAngleCutoffDegrees = lightAngleScale;
-		spotLightVS.outerAngleCutoffDegrees = lightAngleOffset;
-
-		// We can convert the direction using the view matrix because it doesn't scale
-		spotLightVS.direction = view * glm::vec4(spotLightVS.direction, 0.0f);
-	}
-
-	std::vector<DirectionalLight> dirLightsViewSpace(dirLights);
-	for (int i = 0, count = dirLightsViewSpace.size(); i < count; i++)
-	{
-		auto& dirLightViewSpace = dirLightsViewSpace[i];
-		dirLightViewSpace.direction = view * glm::vec4(dirLightViewSpace.direction, 0.0f);
-	}
 
 	glBindBuffer(GL_UNIFORM_BUFFER, lightsUBO);
 	if (numLights[0] > 0) {
-		glBufferSubData(GL_UNIFORM_BUFFER, 0, numLights[0] * sizeof(PointLight), pointLightsViewSpace.data());
+		glBufferSubData(GL_UNIFORM_BUFFER, 0, numLights[0] * sizeof(PointLight), pointLights.data());
 	}
 	if (numLights[1] > 0) {
-		glBufferSubData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight), numLights[1] * sizeof(SpotLight), spotLightsViewSpace.data());
+		glBufferSubData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight), numLights[1] * sizeof(SpotLight), spotLights.data());
 	}
 	if (numLights[2] > 0) {
-		glBufferSubData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight) + Shader::maxSpotLights * sizeof(SpotLight), numLights[2] * sizeof(DirectionalLight), dirLightsViewSpace.data());
+		glBufferSubData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight) + Shader::maxSpotLights * sizeof(SpotLight), numLights[2] * sizeof(DirectionalLight), dirLights.data());
 	}
 	glBufferSubData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight) + Shader::maxSpotLights * sizeof(SpotLight) + Shader::maxDirLights * sizeof(DirectionalLight), sizeof(numLights), numLights);
 
-	for (const Entity& entity : entities)
+	for (int i = 0; i < entities.size(); i++)
 	{
-		if (entity.parent < 0) RenderEntity(entity, glm::mat4(1.0f), view, projection);
+		Entity& entity = entities[i];
+		if (entity.meshIdx < 0)
+		{
+			continue;
+		}
+		bool highlight = selectedEntityIdx == i || IsParent(i, selectedEntityIdx);
+		if (highlight)
+		{
+			glColorMaski(1, 0xFF, 0xFF, 0xFF, 0xFF);
+		}
+		else
+		{
+			glColorMaski(1, 0x00, 0x00, 0x00, 0x00);
+		}
+		const glm::mat4& globalTransform = globalTransforms[i];
+		glm::mat4 modelView = view * globalTransform;
+		Mesh& entityMesh = resources.meshes[entity.meshIdx];
+		for (Submesh& submesh : entityMesh.submeshes)
+		{
+			glBindVertexArray(submesh.VAO);
+			Shader& shader = resources.GetOrCreateShader(submesh.flags, submesh.flatShading);
+			shader.use();
+			shader.SetMat4("modelView", glm::value_ptr(modelView));
+			shader.SetMat4("projection", glm::value_ptr(projection));
+			bool hasNormals = HasFlag(submesh.flags, VertexAttribute::NORMAL);
+			if (hasNormals)
+			{
+				glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelView)));
+				shader.SetMat3("normalMatrixVS", glm::value_ptr(normalMatrix));
+				shader.SetVec3("pointLight.positionVS", glm::vec3(0.0f, 0.0f, 0.0f));
+				shader.SetVec3("pointLight.color", glm::vec3(0.5f, 0.5f, 0.5f));
+			}
+			if (entity.skeletonIdx >= 0)
+			{
+				auto skinningMatrices = ComputeSkinningMatrices(skeletons[entity.skeletonIdx], entities);
+				shader.SetMat4("skinningMatrices", glm::value_ptr(skinningMatrices.front()), (int)skinningMatrices.size());
+			}
+			bool hasMorphTargets = HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET0_POSITION);
+			if (hasMorphTargets)
+			{
+				shader.SetFloat("morph1Weight", entity.morphTargetWeights[0]);
+				shader.SetFloat("morph2Weight", entity.morphTargetWeights[1]);
+			}
+			if (submesh.materialIndex >= 0)
+			{
+				const PBRMaterial& material = resources.materials[submesh.materialIndex];
+				shader.SetVec4("material.baseColorFactor", material.baseColorFactor);
+				shader.SetFloat("material.metallicFactor", material.metallicFactor);
+				shader.SetFloat("material.roughnessFactor", material.roughnessFactor);
+				shader.SetFloat("material.occlusionStrength", material.occlusionStrength);
+
+				bool hasTextureCoords = HasFlag(submesh.flags, VertexAttribute::TEXCOORD);
+
+				// TODO: don't set unused textures
+				if (hasTextureCoords)
+				{
+					int textureUnit = 0;
+					glActiveTexture(GL_TEXTURE0 + textureUnit);
+					glBindTexture(GL_TEXTURE_2D, resources.textures[material.baseColorTextureIdx].id);
+					shader.SetInt("material.baseColorTexture", textureUnit);
+					textureUnit++;
+
+					glActiveTexture(GL_TEXTURE0 + textureUnit);
+					glBindTexture(GL_TEXTURE_2D, resources.textures[material.metallicRoughnessTextureIdx].id);
+					shader.SetInt("material.metallicRoughnessTexture", textureUnit);
+					textureUnit++;
+
+					if (material.normalTextureIdx >= 0)
+					{
+						glActiveTexture(GL_TEXTURE0 + textureUnit);
+						glBindTexture(GL_TEXTURE_2D, resources.textures[material.normalTextureIdx].id);
+						shader.SetInt("material.normalTexture", textureUnit);
+						textureUnit++;
+
+						// This uniform variable is only used if tangents (which are synonymous with normal mapping for now)
+						// are provided
+						if (HasFlag(submesh.flags, VertexAttribute::TANGENT))
+						{
+							shader.SetFloat("material.normalScale", material.normalScale);
+						}
+					}
+
+					glActiveTexture(GL_TEXTURE0 + textureUnit);
+					glBindTexture(GL_TEXTURE_2D, resources.textures[material.occlusionTextureIdx].id);
+					shader.SetInt("material.occlusionTexture", textureUnit);
+					textureUnit++;
+				}
+			}
+			if (submesh.hasIndexBuffer)
+			{
+				glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, nullptr);
+			}
+			else
+			{
+				glDrawArrays(GL_TRIANGLES, 0, submesh.countVerticesOrIndices);
+			}
+
+			// TODO: find better place for calculating scene bbox/non-rendering stuff
+			auto bboxWorldPoints = entityMesh.boundingBox.GetPoints();
+			for (glm::vec3& point : bboxWorldPoints)
+			{
+				point = globalTransform * glm::vec4(point, 1.0f);
+				sceneBoundingBox.minXYZ = glm::min(point, sceneBoundingBox.minXYZ);
+				sceneBoundingBox.maxXYZ = glm::max(point, sceneBoundingBox.maxXYZ);
+			}
+		}
+
+		if (entity.cameraIdx >= 0)
+		{
+			// We don't need to mess with yaw/pitch. Those are only used for changing camera via keyboard/mouse input. 
+			// Entity cameras are not controllable by input; they only change when their entity's transform changes.
+			Camera& camera = cameras[entity.cameraIdx];
+			glm::vec4 globalTransformXAxisNormalized = glm::normalize(globalTransform[0]);
+			glm::vec4 globalTransformYAxisNormalized = glm::normalize(globalTransform[1]);
+			glm::vec4 globalTransformZAxisNormalized = glm::normalize(globalTransform[2]);
+			camera.right = globalTransformXAxisNormalized;
+			camera.up = globalTransformYAxisNormalized;
+			camera.front = -globalTransformZAxisNormalized;
+			camera.position = glm::vec3(globalTransform[3]);
+		}
 	}
 
 	//RenderBoundingBox(sceneBoundingBox, projection * view);
@@ -311,6 +531,7 @@ void Scene::Render(int windowWidth, int windowHeight)
 	// Position controllable camera according to scene bounding box
 	if (firstFrame)
 	{
+		firstFrame = false;
 		glm::vec3 dims = sceneBoundingBox.maxXYZ - sceneBoundingBox.minXYZ;
 		glm::vec3 center = sceneBoundingBox.GetCenter();
 		glm::vec3 offsetFromCenter(0.0f);
@@ -366,7 +587,6 @@ void Scene::Render(int windowWidth, int windowHeight)
 			}
 		}
 		controllableCamera.movementSpeed = maxDim / 5.0f;
-		firstFrame = false;
 	}
 }
 
@@ -408,135 +628,6 @@ void Scene::UpdateAndRender(const Input& input)
 	Render(input.windowWidth, input.windowHeight);
 }
 
-void Scene::RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection, bool parentHighlighted)
-{
-	bool highlight = parentHighlighted || selectedEntityName == entity.name;
-	if (highlight)
-	{
-		glColorMaski(1, 0xFF, 0xFF, 0xFF, 0xFF);
-	}
-	else
-	{
-		glColorMaski(1, 0x00, 0x00, 0x00, 0x00);
-	}
-	glm::mat4 globalTransform = parentTransform * entity.transform.GetMatrix();
-	glm::mat4 modelView = view * globalTransform;
-	if (entity.meshIdx >= 0)
-	{
-		Mesh& entityMesh = resources.meshes[entity.meshIdx];
-		for (Submesh& submesh : entityMesh.submeshes)
-		{
-			glBindVertexArray(submesh.VAO);
-			Shader& shader = resources.GetOrCreateShader(submesh.flags, submesh.flatShading);
-			shader.use();
-			shader.SetMat4("modelView", glm::value_ptr(modelView));
-			shader.SetMat4("projection", glm::value_ptr(projection));
-			bool hasNormals = HasFlag(submesh.flags, VertexAttribute::NORMAL);
-			if (hasNormals)
-			{
-				glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelView)));
-				shader.SetMat3("normalMatrixVS", glm::value_ptr(normalMatrix));
-				shader.SetVec3("pointLight.positionVS", glm::vec3(0.0f, 0.0f, 0.0f));
-				shader.SetVec3("pointLight.color", glm::vec3(0.5f, 0.5f, 0.5f));
-			}
-			if (entity.skeletonIdx >= 0)
-			{
-				auto skinningMatrices = ComputeSkinningMatrices(skeletons[entity.skeletonIdx], entities);
-				shader.SetMat4("skinningMatrices", glm::value_ptr(skinningMatrices.front()), (int)skinningMatrices.size());
-			}
-			bool hasMorphTargets = HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET0_POSITION);
-			if (hasMorphTargets)
-			{
-				shader.SetFloat("morph1Weight", entity.morphTargetWeights[0]);
-				shader.SetFloat("morph2Weight", entity.morphTargetWeights[1]);
-			}
-			if (submesh.materialIndex >= 0)
-			{
-				const PBRMaterial& material = resources.materials[submesh.materialIndex];
-				shader.SetVec4("material.baseColorFactor", material.baseColorFactor);
-				shader.SetFloat("material.metallicFactor", material.metallicFactor);
-				shader.SetFloat("material.roughnessFactor", material.roughnessFactor);
-				shader.SetFloat("material.occlusionStrength", material.occlusionStrength);
-
-				bool hasTextureCoords = HasFlag(submesh.flags, VertexAttribute::TEXCOORD);
-				
-				// TODO: don't set unused textures
-				if (hasTextureCoords)
-				{
-					int textureUnit = 0;
-					glActiveTexture(GL_TEXTURE0 + textureUnit);
-					glBindTexture(GL_TEXTURE_2D, resources.textures[material.baseColorTextureIdx].id);
-					shader.SetInt("material.baseColorTexture", textureUnit);
-					textureUnit++;
-
-					glActiveTexture(GL_TEXTURE0 + textureUnit);
-					glBindTexture(GL_TEXTURE_2D, resources.textures[material.metallicRoughnessTextureIdx].id);
-					shader.SetInt("material.metallicRoughnessTexture", textureUnit);
-					textureUnit++;
-
-					if (material.normalTextureIdx >= 0)
-					{
-						glActiveTexture(GL_TEXTURE0 + textureUnit);
-						glBindTexture(GL_TEXTURE_2D, resources.textures[material.normalTextureIdx].id);
-						shader.SetInt("material.normalTexture", textureUnit);
-						textureUnit++;
-
-						// This uniform variable is only used if tangents (which are synonymous with normal mapping for now)
-						// are provided
-						if (HasFlag(submesh.flags, VertexAttribute::TANGENT))
-						{
-							shader.SetFloat("material.normalScale", material.normalScale);
-						}
-					}
-
-					glActiveTexture(GL_TEXTURE0 + textureUnit);
-					glBindTexture(GL_TEXTURE_2D, resources.textures[material.occlusionTextureIdx].id);
-					shader.SetInt("material.occlusionTexture", textureUnit);
-					textureUnit++;
-				}
-			}
-			if (submesh.hasIndexBuffer)
-			{
-				glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, nullptr);
-			}
-			else
-			{
-				glDrawArrays(GL_TRIANGLES, 0, submesh.countVerticesOrIndices);
-			}
-		}
-
-		//RenderBoundingBox(entityMesh.boundingBox, projection * modelView);
-
-		// TODO: find better place for calculating scene bbox/non-rendering stuff
-		auto bboxWorldPoints = entityMesh.boundingBox.GetPoints();
-		for (glm::vec3& point : bboxWorldPoints)
-		{
-			point = globalTransform * glm::vec4(point, 1.0f);
-			sceneBoundingBox.minXYZ = glm::min(point, sceneBoundingBox.minXYZ);
-			sceneBoundingBox.maxXYZ = glm::max(point, sceneBoundingBox.maxXYZ);
-		}
-	}
-
-	if (entity.cameraIdx >= 0)
-	{
-		// We don't need to mess with yaw/pitch. Those are only used for changing camera via keyboard/mouse input. 
-		// Entity cameras are not controllable by input; they only change when their entity's transform changes.
-		Camera& camera = cameras[entity.cameraIdx];
-		glm::vec4 globalTransformXAxisNormalized = glm::normalize(globalTransform[0]);
-		glm::vec4 globalTransformYAxisNormalized = glm::normalize(globalTransform[1]);
-		glm::vec4 globalTransformZAxisNormalized = glm::normalize(globalTransform[2]);
-		camera.right = globalTransformXAxisNormalized;
-		camera.up = globalTransformYAxisNormalized;
-		camera.front = -globalTransformZAxisNormalized;
-		camera.position = glm::vec3(globalTransform[3]);
-	}
-
-	for (int childIndex : entity.children)
-	{
-		RenderEntity(entities[childIndex], globalTransform, view, projection, highlight);
-	}
-}
-
 void Scene::RenderUI()
 {
 	ImGui::Begin("Scene");
@@ -545,28 +636,20 @@ void Scene::RenderUI()
 	{
 		if (entities[i].parent < 0)
 		{
-			RenderHierarchyUI(entities[i]);
+			RenderHierarchyUI(i);
 		}
 	}
 
 	ImGui::End();
-
-	Entity* selectedEntity = nullptr;
-	for (Entity& entity : entities)
+	
+	if (selectedEntityIdx >= 0)
 	{
-		if (entity.name == selectedEntityName)
-		{
-			selectedEntity = &entity;
-			break;
-		}
-	}
-	if (selectedEntity != nullptr)
-	{
+		Entity& selectedEntity = entities[selectedEntityIdx];
 		ImGui::Begin("Transform");
 
-		ImGui::DragFloat3("Translation", &selectedEntity->transform.translation.x, 0.1f);
-		ImGui::DragFloat4("Rotation(quat)", &selectedEntity->transform.rotation.x);
-		ImGui::DragFloat3("Scale", &selectedEntity->transform.scale.x, 0.1f);
+		ImGui::DragFloat3("Translation", &selectedEntity.transform.translation.x, 0.1f);
+		ImGui::DragFloat4("Rotation(quat)", &selectedEntity.transform.rotation.x);
+		ImGui::DragFloat3("Scale", &selectedEntity.transform.scale.x, 0.1f);
 
 		ImGui::End();
 	}
@@ -622,24 +705,23 @@ void Scene::RenderUI()
 	}
 }
 
-void Scene::RenderHierarchyUI(const Entity& entity)
+void Scene::RenderHierarchyUI(int entityIdx)
 {
 	ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow;
-	if (entity.name == selectedEntityName)
+	if (entityIdx == selectedEntityIdx)
 	{
 		flags |= ImGuiTreeNodeFlags_Selected;
 	}
+	Entity& entity = entities[entityIdx];
 	if (ImGui::TreeNodeEx(entity.name.c_str(), flags))
 	{
 		if (ImGui::IsItemClicked())
 		{
-			selectedEntityName = entity.name;
+			selectedEntityIdx = entityIdx;
 		}
-		for (int childIndex : entity.children)
+		for (int childIdx : entity.children)
 		{
-			const Entity& child = entities[childIndex];
-
-			RenderHierarchyUI(child);
+			RenderHierarchyUI(childIdx);
 		}
 
 		ImGui::TreePop();
@@ -648,7 +730,7 @@ void Scene::RenderHierarchyUI(const Entity& entity)
 	{
 		if (ImGui::IsItemClicked())
 		{
-			selectedEntityName = entity.name;
+			selectedEntityIdx = entityIdx;
 		}
 	}
 }
@@ -665,4 +747,36 @@ void Scene::RenderBoundingBox(const BBox& bbox, const glm::mat4& mvp)
 	boundingBoxShader.use();
 	boundingBoxShader.SetMat4("mvp", glm::value_ptr(mat));
 	glDrawElements(GL_LINES, 24, GL_UNSIGNED_SHORT, 0);
+}
+
+void Scene::UpdateGlobalTransforms()
+{
+	for (int i = 0; i < entities.size(); i++)
+	{
+		Entity& entity = entities[i];
+		if (entity.parent < 0) {
+			UpdateGlobalTransforms(i, glm::mat4(1.0f));
+		}
+	}
+}
+
+void Scene::UpdateGlobalTransforms(int entityIdx, const glm::mat4& parentTransform)
+{
+	glm::mat4& globalTransform = globalTransforms[entityIdx];
+	const Entity& entity = entities[entityIdx];
+	globalTransform = parentTransform * entity.transform.GetMatrix();
+	for (int child : entity.children)
+	{
+		UpdateGlobalTransforms(child, globalTransform);
+	}
+}
+
+bool Scene::IsParent(int entityChild, int entityParent)
+{
+	if (entities[entityChild].parent < 0)
+	{
+		return false;
+	}
+
+	return IsParent(entities[entityChild].parent, entityParent);
 }

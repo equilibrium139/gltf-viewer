@@ -25,22 +25,23 @@ public:
 	float exposure = 1.0f;
 private:
 	void Render(int windowWidth, int windowHeight);
-	void RenderEntity(const Entity& entity, const glm::mat4& parentTransform, const glm::mat4& view, const glm::mat4& projection, bool parentHighlighted = false);
 	void RenderUI();
-	void RenderHierarchyUI(const Entity& entity);
+	void RenderHierarchyUI(int entityIdx);
 	void RenderBoundingBox(const BBox& bbox, const glm::mat4& mvp);
+	void UpdateGlobalTransforms();
+	void UpdateGlobalTransforms(int entityIdx, const glm::mat4& parentTransform);
+	bool IsParent(int entityChild, int entityParent);
 	std::vector<Animation> animations;
 	std::vector<Entity> entities;
+	std::vector<glm::mat4> globalTransforms;
 	std::vector<Skeleton> skeletons;
 	std::vector<Camera> cameras;
-	std::vector<PointLight> pointLights;
-	std::vector<SpotLight> spotLights;
-	std::vector<DirectionalLight> dirLights;
+	std::vector<Light> lights;
 	std::vector<std::uint8_t> animationEnabled; // avoiding vector<bool> to allow imgui to have bool references to elements 
 	Camera controllableCamera;
 	Camera* currentCamera = &controllableCamera;
 	GLTFResources resources;
-	std::string selectedEntityName;
+	int selectedEntityIdx = -1;
 	GLuint boundingBoxVAO;
 	Shader boundingBoxShader = Shader("Shaders/bbox.vert", "Shaders/bbox.frag");
 	BBox sceneBoundingBox = {

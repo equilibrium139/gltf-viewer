@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <utility>
 
+// TODO: just make this part of Scene?
 struct GLTFResources
 {
 	GLTFResources(const tinygltf::Model& model);
