@@ -9,19 +9,19 @@
 
 // Interface light
 struct Light {
-	enum Type {
+	enum Type : int {
 		Point, 
 		Spot,
 		Directional
 	};
 
-	Type type;
-	glm::vec3 color;
-	float intensity;
-	float range;
-	float innerAngleCutoffDegrees;
-	float outerAngleCutoffDegrees;
-	int entityIdx;
+	Type type = Type::Point;
+	glm::vec3 color = glm::vec3(1.0f);
+	float intensity = 1.0f;
+	float range = 10.0f;
+	float innerAngleCutoffDegrees = 0.0f;
+	float outerAngleCutoffDegrees = 45.0f;
+	int entityIdx; // must be >= 0
 };
 
 // GPU lights (for use in shaders). Padding added to match std140 layout

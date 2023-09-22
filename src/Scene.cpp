@@ -313,6 +313,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(pointLight);
+		pointLightEntity.lightIdx = 0;
 
 		entityIdx++;
 		entities.emplace_back();
@@ -332,6 +333,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(spotLight);
+		spotLightEntity.lightIdx = 1;
 
 		entityIdx++;
 		entities.emplace_back();
@@ -347,6 +349,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(dirLight);
+		dirLightEntity.lightIdx = 2;
 	}
 }
 
@@ -645,11 +648,38 @@ void Scene::RenderUI()
 	if (selectedEntityIdx >= 0)
 	{
 		Entity& selectedEntity = entities[selectedEntityIdx];
-		ImGui::Begin("Transform");
+		ImGui::Begin("Components");
 
-		ImGui::DragFloat3("Translation", &selectedEntity.transform.translation.x, 0.1f);
-		ImGui::DragFloat4("Rotation(quat)", &selectedEntity.transform.rotation.x);
-		ImGui::DragFloat3("Scale", &selectedEntity.transform.scale.x, 0.1f);
+		if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
+		{
+			ImGui::DragFloat3("Translation", &selectedEntity.transform.translation.x, 0.1f);
+			ImGui::DragFloat4("Rotation(quat)", &selectedEntity.transform.rotation.x); // TODO: make this reasonable
+			ImGui::DragFloat3("Scale", &selectedEntity.transform.scale.x, 0.1f);
+		}
+
+		if (selectedEntity.lightIdx >= 0)
+		{
+			Light& light = lights[selectedEntity.lightIdx];
+			if (ImGui::CollapsingHeader("Light", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				constexpr int numLightTypes = 3;
+				const char* lightTypeStrings[numLightTypes] = { "Point", "Spot", "Directional" };
+				ImGui::Combo("Type", (int*)&light.type, lightTypeStrings, numLightTypes);
+				ImGui::ColorPicker3("Color", &light.color.x);
+				ImGui::InputFloat("Intensity", &light.intensity, 0.1f);
+				light.intensity = std::max(light.intensity, 0.0f);
+				if (light.type == Light::Point || light.type == Light::Spot)
+				{
+					ImGui::InputFloat("Range", &light.range, 0.1f);
+					light.range = std::max(light.range, 0.0f);
+				}
+				if (light.type == Light::Spot)
+				{
+					ImGui::DragFloat("Inner cone angle", &light.innerAngleCutoffDegrees, 0.1f, 0.0f, light.outerAngleCutoffDegrees - 0.1f);
+					ImGui::DragFloat("Outer cone angle", &light.outerAngleCutoffDegrees, 0.1f, light.innerAngleCutoffDegrees + 0.1f, 90.0f);
+				}
+			}
+		}
 
 		ImGui::End();
 	}
