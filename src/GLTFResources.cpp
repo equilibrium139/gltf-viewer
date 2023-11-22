@@ -43,6 +43,23 @@ static std::vector<std::string> GetShaderDefines(VertexAttribute flags, bool fla
 	return defines;
 }
 
+static bool IsLinearSpaceTexture(int textureIdx, const std::vector<tinygltf::Material> materials)
+{
+	for (const tinygltf::Material& material : materials)
+	{
+		if (textureIdx == material.pbrMetallicRoughness.baseColorTexture.index || textureIdx == material.emissiveTexture.index)
+		{
+			return false;
+		}
+		else if (textureIdx == material.pbrMetallicRoughness.metallicRoughnessTexture.index || textureIdx == material.normalTexture.index || textureIdx == material.occlusionTexture.index)
+		{
+			return true;
+		}
+	}
+	assert(false && "Should not be here");
+	return false;
+}
+
 GLTFResources::GLTFResources(const tinygltf::Model& model)
 {
 	for (const auto& extension : model.extensionsUsed)
@@ -55,11 +72,13 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 		meshes.emplace_back(mesh, model);
 	}
 
-	for (const tinygltf::Texture& texture : model.textures)
+	for (int i = 0; i < model.textures.size(); i++)
 	{
+		const tinygltf::Texture& texture = model.textures[i];
 		assert(texture.source >= 0);
 
 		const tinygltf::Image& image = model.images[texture.source];
+		bool linearSpaceTexture = IsLinearSpaceTexture(i, model.materials);
 
 		int numComponents = image.component;
 		GLenum internalFormat;
@@ -73,11 +92,11 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 			format = GL_RG;
 		}
 		else if (numComponents == 3) {
-			internalFormat = GL_SRGB;
+			internalFormat = linearSpaceTexture ? GL_RGB : GL_SRGB;
 			format = GL_RGB;
 		}
 		else if (numComponents == 4) {
-			internalFormat = GL_SRGB_ALPHA;
+			internalFormat = linearSpaceTexture ? GL_RGBA : GL_SRGB_ALPHA;
 			format = GL_RGBA;
 		}
 		else
