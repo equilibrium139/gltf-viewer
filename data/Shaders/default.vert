@@ -34,6 +34,7 @@ layout(location = 9) in vec4 aBaseTangent;
     layout(location=12) in vec4 aVertexColor;
 #endif // HAS_VERTEX_COLORS
 
+// TODO: rename "model" to "world"
 uniform mat4 modelView;
 uniform mat4 projection;
 

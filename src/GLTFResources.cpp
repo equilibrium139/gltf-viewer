@@ -136,3 +136,29 @@ Shader& GLTFResources::GetOrCreateShader(VertexAttribute attributes, bool flatSh
 		}, defines)});
 	return shaders.back().second;
 }
+
+Shader& GLTFResources::GetOrCreateDepthShader(VertexAttribute attributes, bool depthCubemap)
+{
+	// Only take attributes that affect depth shading into account
+	constexpr VertexAttribute depthShadingAttributes = VertexAttribute::POSITION | VertexAttribute::JOINTS | VertexAttribute::WEIGHTS | VertexAttribute::MORPH_TARGET0_POSITION;
+	VertexAttribute relevantAttributes = attributes & depthShadingAttributes;
+	for (auto& pair : depthShaders)
+	{
+		VertexAttribute key = (pair.first.first & depthShadingAttributes);
+		if (relevantAttributes == key && depthCubemap == pair.first.second)
+		{
+			return pair.second;
+		}
+	}
+	// TODO: point light depth shader
+	auto defines = GetShaderDefines(relevantAttributes, false);
+	if (!depthCubemap)
+	{
+		depthShaders.push_back({ { relevantAttributes, false }, Shader("Shaders/depth.vert", "Shaders/empty.frag", nullptr, {}, defines) });
+	}
+	else
+	{
+		depthShaders.push_back({ { relevantAttributes, true }, Shader("Shaders/worldspace.vert", "Shaders/cubedepth.frag", "Shaders/cubedepth.geom", {}, defines)});
+	}
+	return depthShaders.back().second;
+}

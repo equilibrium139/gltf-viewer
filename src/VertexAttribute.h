@@ -21,37 +21,37 @@ enum class VertexAttribute : std::uint32_t
     COLOR = 1 << 12,
 };
 
-inline VertexAttribute operator | (VertexAttribute lhs, VertexAttribute rhs)
+inline constexpr VertexAttribute operator | (VertexAttribute lhs, VertexAttribute rhs)
 {
     using T = std::underlying_type_t<VertexAttribute>;
     return (VertexAttribute)((T)lhs | (T)rhs);
 }
 
-inline VertexAttribute& operator |= (VertexAttribute& lhs, VertexAttribute rhs)
+inline constexpr VertexAttribute& operator |= (VertexAttribute& lhs, VertexAttribute rhs)
 {
     lhs = lhs | rhs;
     return lhs;
 }
 
-inline VertexAttribute operator & (VertexAttribute lhs, VertexAttribute rhs)
+inline constexpr VertexAttribute operator & (VertexAttribute lhs, VertexAttribute rhs)
 {
     using T = std::underlying_type_t<VertexAttribute>;
     return (VertexAttribute)((T)lhs & (T)rhs);
 }
 
-inline VertexAttribute& operator &= (VertexAttribute& lhs, VertexAttribute rhs)
+inline constexpr VertexAttribute& operator &= (VertexAttribute& lhs, VertexAttribute rhs)
 {
     lhs = lhs & rhs;
     return lhs;
 }
 
-inline VertexAttribute operator ~(VertexAttribute attr)
+inline constexpr VertexAttribute operator ~(VertexAttribute attr)
 {
     using T = std::underlying_type_t<VertexAttribute>;
     return (VertexAttribute)~(T)(attr);
 }
 
-inline bool HasFlag(VertexAttribute flags, VertexAttribute flag_to_check)
+inline constexpr bool HasFlag(VertexAttribute flags, VertexAttribute flag_to_check)
 {
     return (std::underlying_type_t<VertexAttribute>)(flags & flag_to_check) != 0;
 }

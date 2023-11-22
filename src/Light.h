@@ -21,6 +21,7 @@ struct Light {
 	float range = 10.0f;
 	float innerAngleCutoffDegrees = 0.0f;
 	float outerAngleCutoffDegrees = 45.0f;
+	float depthmapFarPlane = 25.0f;
 	int entityIdx; // must be >= 0
 };
 
@@ -28,20 +29,27 @@ struct Light {
 struct PointLight {
 	glm::vec3 color;
 	float range;
+
 	glm::vec3 positionVS;
 	float intensity;
 
-	PointLight(glm::vec3 color, glm::vec3 position, float range, float intensity)
-		:color(color), range(range), positionVS(position), intensity(intensity)  {}
+	float depthCubemapFarPlane;
+	float pad0, pad1, pad2; 
+
+	PointLight(glm::vec3 color, glm::vec3 position, float range, float intensity, GLuint depthCubemapFarPlane)
+		:color(color), range(range), positionVS(position), intensity(intensity), depthCubemapFarPlane(depthCubemapFarPlane)  {}
 };
 
 struct SpotLight {
 	glm::vec3 color;
 	float range;
+
 	glm::vec3 positionVS;
 	float lightAngleScale;
+
 	glm::vec3 directionVS;
 	float lightAngleOffset;
+
 	float intensity;
 	float pad0, pad1, pad2; // to account for padding between spotlight array and dirlight array
 
@@ -59,6 +67,7 @@ struct SpotLight {
 struct DirectionalLight {
 	glm::vec3 color;
 	float intensity;
+
 	glm::vec3 directionVS;
 	float pad0;
 

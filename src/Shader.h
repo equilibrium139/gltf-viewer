@@ -32,6 +32,7 @@ public:
 
 	void SetBool(const char* name, bool value);
 	void SetInt(const char* name, int value);
+	void SetIntArray(const char* name, int* values, unsigned int count);
 	void SetUint(const char* name, std::uint32_t value);
 	void SetFloat(const char* name, float value);
 	void SetMat4(const char* name, const float* value);

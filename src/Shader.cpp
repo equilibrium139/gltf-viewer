@@ -38,7 +38,7 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	if (!success)
 	{
 		glGetShaderInfoLog(vertexShader, sizeof(infoLog), NULL, infoLog);
-		std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << '\n';
+		std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
 		//std::cout << "Vertex shader source:\n" << version + defaultDefinesString + definesString + vShaderCode;
 		// TODO find a solution for this. It's affecting the next Shader object created
 		// when this one fails
@@ -49,7 +49,7 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	if (!success)
 	{
 		glGetShaderInfoLog(fragmentShader, sizeof(infoLog), NULL, infoLog);
-		std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << '\n';
+		std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
 		//std::cout << "Fragment shader source:\n" << version + defaultDefinesString + definesString + fShaderCode;
 	}
 
@@ -61,13 +61,14 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 		unsigned int geomShader = glCreateShader(GL_GEOMETRY_SHADER);
 		auto geomSource = get_file_contents(geometryPath);
 		auto code = geomSource.c_str();
-		glShaderSource(geomShader, 1, &code, NULL);
+		const char* gShaderSources[4] = { version.c_str(), definesString.c_str(), defaultDefinesString.c_str(), code };
+		glShaderSource(geomShader, 4, gShaderSources, NULL);
 		glCompileShader(geomShader);
 		glGetShaderiv(geomShader, GL_COMPILE_STATUS, &success);
 		if (!success)
 		{
 			glGetShaderInfoLog(geomShader, sizeof(infoLog), NULL, infoLog);
-			std::cout << "ERROR::SHADER::GEOMETRY::COMPILATION_FAILED\n" << infoLog << '\n';
+			std::cout << "ERROR::SHADER::GEOMETRY::COMPILATION_FAILED\n" << infoLog << std::endl;
 		}
 
 		glAttachShader(id, geomShader);
@@ -79,9 +80,9 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	if (!success)
 	{
 		glGetProgramInfoLog(id, sizeof(infoLog), NULL, infoLog);
-		std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << '\n';
-		std::cout << "Vertex shader source:\n" << version + defaultDefinesString + definesString + vShaderCode << '\n';
-		std::cout << "Fragment shader source:\n" << version + defaultDefinesString + definesString + fShaderCode << '\n';
+		std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
+		std::cout << "Vertex shader source:\n" << version + defaultDefinesString + definesString + vShaderCode << std::endl;
+		std::cout << "Fragment shader source:\n" << version + defaultDefinesString + definesString + fShaderCode << std::endl;
 	}
 
 	glDeleteShader(vertexShader);
@@ -108,6 +109,11 @@ void Shader::SetBool(const char * name, bool value)
 void Shader::SetInt(const char * name, int value)
 {
 	glUniform1i(GetUniformLocation(name), value);
+}
+
+void Shader::SetIntArray(const char* name, int* values, unsigned int count)
+{
+	glUniform1iv(GetUniformLocation(name), count, values);
 }
 
 void Shader::SetUint(const char* name, std::uint32_t value)

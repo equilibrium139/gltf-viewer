@@ -19,10 +19,13 @@ struct GLTFResources
 	// TODO: make shader depend on material as well
 	using ShaderKey = std::pair<VertexAttribute, bool>; // bool = flatShading
 	std::vector<std::pair<ShaderKey, Shader>> shaders;
+	using DepthShaderKey = std::pair<VertexAttribute, bool>; // bool = depth cubemap (for point lights)
+	std::vector<std::pair<DepthShaderKey, Shader>> depthShaders;
 	std::vector<Texture> textures;
 	std::vector<PBRMaterial> materials;
 	int white1x1RGBAIndex;
 	int max1x1RedIndex;
 
 	Shader& GetOrCreateShader(VertexAttribute attributes, bool flatShading);
+	Shader& GetOrCreateDepthShader(VertexAttribute attributes, bool depthCubemap);
 };

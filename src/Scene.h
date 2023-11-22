@@ -25,6 +25,8 @@ public:
 	float exposure = 1.0f;
 private:
 	void Render(int windowWidth, int windowHeight);
+	// Assumes global transforms are up to date
+	void RenderShadowMaps(const glm::mat4& view);
 	void RenderUI();
 	void RenderHierarchyUI(int entityIdx);
 	void RenderBoundingBox(const BBox& bbox, const glm::mat4& mvp);
@@ -37,6 +39,8 @@ private:
 	std::vector<Skeleton> skeletons;
 	std::vector<Camera> cameras;
 	std::vector<Light> lights;
+	std::vector<GLuint> depthMapFBOs;
+	std::vector<GLuint> depthMaps;
 	std::vector<std::uint8_t> animationEnabled; // avoiding vector<bool> to allow imgui to have bool references to elements 
 	Camera controllableCamera;
 	Camera* currentCamera = &controllableCamera;
@@ -56,4 +60,7 @@ private:
 	GLuint lightsUBO;
 	int texW, texH;
 	bool firstFrame = true;
+	// TODO: make shadow map size tweakable? And in general allow for shadow options like toggling shadows
+	static constexpr int shadowMapWidth = 2048;
+	static constexpr int shadowMapHeight = 2048;
 };

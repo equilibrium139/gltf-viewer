@@ -295,7 +295,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 	}
 
 	// add default lights if scene doesn't have lights
-	if (lights.size() == 0)
+	if (lights.empty())
 	{
 		// TODO: sync entites and global transforms array in a cleaner way
 		int entityIdx = entities.size();
@@ -315,7 +315,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 		lights.push_back(pointLight);
 		pointLightEntity.lightIdx = 0;
 
-		entityIdx++;
+		/*entityIdx++;
 		entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& spotLightEntity = entities.back();
@@ -333,9 +333,9 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(spotLight);
-		spotLightEntity.lightIdx = 1;
+		spotLightEntity.lightIdx = 1;*/
 
-		entityIdx++;
+		/*entityIdx++;
 		entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& dirLightEntity = entities.back();
@@ -349,15 +349,70 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(dirLight);
-		dirLightEntity.lightIdx = 2;
+		dirLightEntity.lightIdx = 2;*/
+	}
+
+	depthMapFBOs.resize(lights.size());
+	depthMaps.resize(lights.size());
+	glGenFramebuffers(lights.size(), &depthMapFBOs.front());
+	glGenTextures(lights.size(), &depthMaps.front());
+
+	for (int i = 0; i < lights.size(); i++)
+	{
+		const Light& light = lights[i];
+		if (light.type == Light::Point)
+		{
+			GLuint fbo = depthMapFBOs[i];
+			glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+			GLuint depthCubemapTexture = depthMaps[i];
+			glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemapTexture);
+			for (int i = 0; i < 6; i++)
+			{
+				glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, shadowMapWidth, shadowMapHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+			}
+
+			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+			glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthCubemapTexture, 0);
+			glDrawBuffer(GL_NONE);
+			glReadBuffer(GL_NONE);
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		}
+		else
+		{
+			GLuint fbo = depthMapFBOs[i];
+			glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+			
+			GLuint depthTexture = depthMaps[i];
+			glBindTexture(GL_TEXTURE_2D, depthTexture);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadowMapWidth, shadowMapHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+			glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTexture, 0);
+			glDrawBuffer(GL_NONE);
+			glReadBuffer(GL_NONE);
+		}
 	}
 }
 
 void Scene::Render(int windowWidth, int windowHeight)
 {
 	UpdateGlobalTransforms();
-
 	const auto view = currentCamera->GetViewMatrix();
+	const auto viewToWorld = glm::inverse(view);
+	RenderShadowMaps(view);
+
 	const float aspectRatio = windowHeight > 0 ? (float)windowWidth / (float)windowHeight : 1.0f;
 	const auto projection = currentCamera->GetProjectionMatrix(aspectRatio);
 
@@ -368,8 +423,10 @@ void Scene::Render(int windowWidth, int windowHeight)
 	std::vector<PointLight> pointLights;
 	std::vector<SpotLight> spotLights;
 	std::vector<DirectionalLight> dirLights;
-	for (const Light& light : lights)
+	// For now assuming all lights have shadow maps so lights[i] has depth map depthMaps[i]
+	for (int i = 0; i < lights.size(); i++)
 	{
+		const Light& light = lights[i];
 		assert(light.entityIdx >= 0);
 		const glm::mat4& entityGlobalTransform = globalTransforms[light.entityIdx];
 		glm::vec3 lightPosVS = view * glm::vec4(glm::vec3(entityGlobalTransform[3]), 1.0f);
@@ -377,7 +434,7 @@ void Scene::Render(int windowWidth, int windowHeight)
 		switch (light.type) 
 		{
 		case Light::Point:
-			pointLights.emplace_back(light.color, lightPosVS, light.range, light.intensity);
+			pointLights.emplace_back(light.color, lightPosVS, light.range, light.intensity, light.depthmapFarPlane);
 			numLights[0]++;
 			break;
 		case Light::Spot:
@@ -426,18 +483,43 @@ void Scene::Render(int windowWidth, int windowHeight)
 		Mesh& entityMesh = resources.meshes[entity.meshIdx];
 		for (Submesh& submesh : entityMesh.submeshes)
 		{
-			glBindVertexArray(submesh.VAO);
 			Shader& shader = resources.GetOrCreateShader(submesh.flags, submesh.flatShading);
 			shader.use();
 			shader.SetMat4("modelView", glm::value_ptr(modelView));
+			shader.SetMat4("viewToWorld", glm::value_ptr(viewToWorld));
 			shader.SetMat4("projection", glm::value_ptr(projection));
 			bool hasNormals = HasFlag(submesh.flags, VertexAttribute::NORMAL);
-			if (hasNormals)
+			int textureUnit = 0;
+			if (hasNormals) // TODO: also for flat shading
 			{
 				glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelView)));
 				shader.SetMat3("normalMatrixVS", glm::value_ptr(normalMatrix));
 				shader.SetVec3("pointLight.positionVS", glm::vec3(0.0f, 0.0f, 0.0f));
 				shader.SetVec3("pointLight.color", glm::vec3(0.5f, 0.5f, 0.5f));
+				int numCubemaps = 0;
+				int num2Dmaps = 0;
+				for (int i = 0; i < lights.size(); i++)
+				{
+					const Light& light = lights[i];
+					if (light.type == Light::Point)
+					{
+						glActiveTexture(GL_TEXTURE0 + textureUnit);
+						glBindTexture(GL_TEXTURE_CUBE_MAP, depthMaps[i]);
+						std::string uniformName = "depthCubemaps[" + std::to_string(numCubemaps) + "]";
+						shader.SetInt(uniformName.c_str(), textureUnit);
+						textureUnit++;
+						numCubemaps++;
+					}
+					else
+					{
+						glActiveTexture(GL_TEXTURE0 + textureUnit);
+						glBindTexture(GL_TEXTURE_2D, depthMaps[i]);
+						std::string uniformName = "depthMaps[" + std::to_string(num2Dmaps) + "]";
+						shader.SetInt(uniformName.c_str(), textureUnit);
+						textureUnit++;
+						num2Dmaps++;
+					}
+				}
 			}
 			if (entity.skeletonIdx >= 0)
 			{
@@ -463,7 +545,6 @@ void Scene::Render(int windowWidth, int windowHeight)
 				// TODO: don't set unused textures
 				if (hasTextureCoords)
 				{
-					int textureUnit = 0;
 					glActiveTexture(GL_TEXTURE0 + textureUnit);
 					glBindTexture(GL_TEXTURE_2D, resources.textures[material.baseColorTextureIdx].id);
 					shader.SetInt("material.baseColorTexture", textureUnit);
@@ -495,6 +576,7 @@ void Scene::Render(int windowWidth, int windowHeight)
 					textureUnit++;
 				}
 			}
+			glBindVertexArray(submesh.VAO);
 			if (submesh.hasIndexBuffer)
 			{
 				glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, nullptr);
@@ -590,6 +672,116 @@ void Scene::Render(int windowWidth, int windowHeight)
 			}
 		}
 		controllableCamera.movementSpeed = maxDim / 5.0f;
+	}
+}
+
+void Scene::RenderShadowMaps(const glm::mat4& view)
+{
+	for (int i = 0; i < lights.size(); i++)
+	{
+		const Light& light = lights[i];
+		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBOs[i]);
+		glViewport(0, 0, shadowMapWidth, shadowMapHeight);
+		glClear(GL_DEPTH_BUFFER_BIT);
+
+		glm::mat4 projection;
+		float nearPlane = 1.0f;
+		float farPlane = 25.0f;
+		if (light.type != Light::Directional)
+		{
+			float fov = light.type == Light::Point ? 90.0f : light.outerAngleCutoffDegrees;
+			projection = glm::perspective(glm::radians(fov), (float)shadowMapWidth / (float)shadowMapHeight, nearPlane, farPlane);
+		}
+		else
+		{
+			// TODO: heuristic, fix later
+			projection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, farPlane);
+		}
+
+		glm::mat4& lightToWorld = globalTransforms[light.entityIdx];
+		glm::vec3 lightToWorldX = glm::normalize(lightToWorld[0]);
+		glm::vec3 lightToWorldY = glm::normalize(lightToWorld[1]);
+		glm::vec3 lightToWorldZ = glm::normalize(lightToWorld[2]);
+		glm::vec3 lightPositionWS = lightToWorld[3];
+
+		glm::vec4 translation;
+		if (light.type != Light::Directional)
+		{
+			glm::vec3 lightPositionVS = view * glm::vec4(lightPositionWS, 1.0);
+			translation = glm::vec4(-lightPositionVS, 1.0f);
+		}
+		else
+		{
+			// TODO: heuristic, fix later
+			translation = glm::vec4(lightToWorldZ * 10.0f, 1.0f);
+		}
+
+		GLuint shadowMapFBO = depthMapFBOs[i];
+
+		for (int i = 0; i < entities.size(); i++)
+		{
+			Entity& entity = entities[i];
+			glm::mat4& entityGlobalTransform = globalTransforms[i];
+			if (entity.meshIdx >= 0)
+			{
+				Mesh& mesh = resources.meshes[entity.meshIdx];
+				for (Submesh& submesh : mesh.submeshes)
+				{
+					Shader& depthShader = resources.GetOrCreateDepthShader(submesh.flags, light.type == Light::Point);
+					depthShader.use();
+					if (light.type == Light::Point)
+					{
+						std::array<glm::mat4, 6> lightProjectionMatrices;
+						// TODO: investigate up direction
+						lightProjectionMatrices[0] = projection * glm::lookAt(lightPositionWS, lightPositionWS + glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+						lightProjectionMatrices[1] = projection * glm::lookAt(lightPositionWS, lightPositionWS + glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+						lightProjectionMatrices[2] = projection * glm::lookAt(lightPositionWS, lightPositionWS + glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+						lightProjectionMatrices[3] = projection * glm::lookAt(lightPositionWS, lightPositionWS + glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+						lightProjectionMatrices[4] = projection * glm::lookAt(lightPositionWS, lightPositionWS + glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+						lightProjectionMatrices[5] = projection * glm::lookAt(lightPositionWS, lightPositionWS + glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+						depthShader.SetMat4("lightProjectionMatrices[0]", glm::value_ptr(lightProjectionMatrices[0]));
+						depthShader.SetMat4("lightProjectionMatrices[1]", glm::value_ptr(lightProjectionMatrices[1]));
+						depthShader.SetMat4("lightProjectionMatrices[2]", glm::value_ptr(lightProjectionMatrices[2]));
+						depthShader.SetMat4("lightProjectionMatrices[3]", glm::value_ptr(lightProjectionMatrices[3]));
+						depthShader.SetMat4("lightProjectionMatrices[4]", glm::value_ptr(lightProjectionMatrices[4]));
+						depthShader.SetMat4("lightProjectionMatrices[5]", glm::value_ptr(lightProjectionMatrices[5]));
+						depthShader.SetMat4("world", glm::value_ptr(entityGlobalTransform));
+						depthShader.SetFloat("farPlane", farPlane);
+						depthShader.SetVec3("lightPosWS", lightPositionWS);
+					}
+					else
+					{
+						glm::vec4 worldToLightX{ lightToWorldX[0], lightToWorldY[0], lightToWorldZ[0], 0.0f };
+						glm::vec4 worldToLightY{ lightToWorldX[1], lightToWorldY[1], lightToWorldZ[1], 0.0f };
+						glm::vec4 worldToLightZ{ lightToWorldX[2], lightToWorldY[2], lightToWorldZ[2], 0.0f };
+						glm::mat4 worldToLight{ worldToLightX, worldToLightY, worldToLightZ, translation };
+						glm::mat4 worldLight = worldToLight * entityGlobalTransform;
+						depthShader.SetMat4("worldLight", glm::value_ptr(worldLight));
+						depthShader.SetMat4("projection", glm::value_ptr(projection));
+					}
+					if (entity.skeletonIdx >= 0)
+					{
+						auto skinningMatrices = ComputeSkinningMatrices(skeletons[entity.skeletonIdx], entities);
+						depthShader.SetMat4("skinningMatrices", glm::value_ptr(skinningMatrices.front()), (int)skinningMatrices.size());
+					}
+					bool hasMorphTargets = HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET0_POSITION);
+					if (hasMorphTargets)
+					{
+						depthShader.SetFloat("morph1Weight", entity.morphTargetWeights[0]);
+						depthShader.SetFloat("morph2Weight", entity.morphTargetWeights[1]);
+					}
+					glBindVertexArray(submesh.VAO);
+					if (submesh.hasIndexBuffer)
+					{
+						glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, nullptr);
+					}
+					else
+					{
+						glDrawArrays(GL_TRIANGLES, 0, submesh.countVerticesOrIndices);
+					}
+				}
+			}
+		}
 	}
 }
 
