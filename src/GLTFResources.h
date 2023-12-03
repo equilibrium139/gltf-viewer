@@ -23,8 +23,13 @@ struct GLTFResources
 	std::vector<std::pair<DepthShaderKey, Shader>> depthShaders;
 	std::vector<Texture> textures;
 	std::vector<PBRMaterial> materials;
+	// TODO: probably should make these global, these aren't specific to each scene
 	int white1x1RGBAIndex;
 	int max1x1RedIndex;
+	
+	// This texture is used as a dummy to ensure that uninitialized samplerCube/sampler2D variables are bound to cubemaps/2D textures respectively. Otherwise we get invalid texture access error
+	// because for example an uninitialized samplerCube might be bound to a 2D texture, even if that samplerCube is not used (because of a conditional for example).
+	int depth1x1Cubemap;
 
 	Shader& GetOrCreateShader(VertexAttribute attributes, bool flatShading);
 	Shader& GetOrCreateDepthShader(VertexAttribute attributes, bool depthCubemap);

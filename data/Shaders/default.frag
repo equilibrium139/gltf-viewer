@@ -50,9 +50,11 @@
         int numDirLights;
     };
 
+    // TODO: change these to array textures
     uniform samplerCubeShadow depthCubemaps[MAX_NUM_POINT_LIGHTS];
-    uniform sampler2D depthMaps[MAX_NUM_SPOT_LIGHTS + MAX_NUM_DIR_LIGHTS];
+    uniform sampler2DShadow depthMaps[MAX_NUM_SPOT_LIGHTS + MAX_NUM_DIR_LIGHTS];
     uniform mat4 viewToWorld;
+    uniform float bias; // TODO: get rid of this nonsense
 
     struct Material
     {
@@ -111,23 +113,30 @@
 
 #endif // HAS_NORMALS || FLAT_SHADING
 
-#ifdef HAS_TEXCOORD
-in vec2 texCoords;
-#endif // HAS_TEXCOORD
+in VS_OUT {
+    vec3 surfacePosVS;
 
-in vec3 surfacePosVS;
+    #ifdef HAS_NORMALS
+        #ifdef HAS_TANGENTS
+            mat3 TBN;
+        #else
+            vec3 surfaceNormalVS;
+        #endif // HAS_TANGENTS
+    #endif // HAS_NORMALS
 
-#ifdef HAS_NORMALS
-    #ifdef HAS_TANGENTS
-        in mat3 TBN;
-    #else
-        in vec3 surfaceNormalVS;
-    #endif // HAS_TANGENTS
-#endif // HAS_NORMALS
+    #ifdef HAS_TEXCOORD
+    vec2 texCoords;
+    #endif // HAS_TEXCOORD
 
-#ifdef HAS_VERTEX_COLORS
-in vec4 vertexColor;
-#endif // HAS_VERTEX_COLORS
+    #ifdef HAS_VERTEX_COLORS
+    vec4 vertexColor;
+    #endif // HAS_VERTEX_COLORS
+
+#if defined(HAS_NORMALS) || defined(FLAT_SHADING)
+    vec4 surfacePosShadowMapUVSpace[MAX_NUM_SPOT_LIGHTS + MAX_NUM_DIR_LIGHTS];
+#endif
+
+} fsIn;
 
 layout(location=0) out vec4 fragColor;
 layout(location=1) out float highlight;
@@ -137,36 +146,36 @@ void main()
     highlight = 1;
 #ifdef HAS_NORMALS
     #ifdef HAS_TANGENTS
-        mat3 normalizedTBN = mat3(normalize(TBN[0]), normalize(TBN[1]), normalize(TBN[2]));
-        vec3 unitNormal = texture(material.normalTexture, texCoords).rgb;
+        mat3 normalizedTBN = mat3(normalize(fsIn.TBN[0]), normalize(fsIn.TBN[1]), normalize(fsIn.TBN[2]));
+        vec3 unitNormal = texture(material.normalTexture, fsIn.texCoords).rgb;
         unitNormal = unitNormal * 2.0 - 1.0;
         unitNormal *= vec3(material.normalScale, material.normalScale, 1.0);
         unitNormal = normalize(normalizedTBN * unitNormal);
     #else
-        vec3 unitNormal = normalize(surfaceNormalVS);
+        vec3 unitNormal = normalize(fsIn.surfaceNormalVS);
     #endif // HAS_TANGENTS
 #elif defined(FLAT_SHADING)
-    vec3 dxTangent = dFdx(surfacePosVS);
-    vec3 dyTangent = dFdy(surfacePosVS);
+    vec3 dxTangent = dFdx(fsIn.surfacePosVS);
+    vec3 dyTangent = dFdy(fsIn.surfacePosVS);
     vec3 unitNormal = normalize(cross(dxTangent, dyTangent));
 #endif // HAS_NORMALS
     
 #if defined(HAS_NORMALS) || defined(FLAT_SHADING)
 
     #ifdef HAS_TEXCOORD
-        vec4 baseColor = texture(material.baseColorTexture, texCoords) * material.baseColorFactor;
-        vec2 metallicRoughness = texture(material.metallicRoughnessTexture, texCoords).gb * vec2(material.metallicFactor, material.roughnessFactor);
-        float occlusion = texture(material.occlusionTexture, texCoords).r * material.occlusionStrength;
+        vec4 baseColor = texture(material.baseColorTexture, fsIn.texCoords) * material.baseColorFactor;
+        vec2 metallicRoughness = texture(material.metallicRoughnessTexture, fsIn.texCoords).gb * vec2(material.metallicFactor, material.roughnessFactor);
+        float occlusion = texture(material.occlusionTexture, fsIn.texCoords).r * material.occlusionStrength;
     #else
         vec4 baseColor = material.baseColorFactor;
         vec2 metallicRoughness = vec2(material.metallicFactor, material.roughnessFactor);
         float occlusion = material.occlusionStrength;
     #endif // HAS_TEXCOORD
     #ifdef HAS_VERTEX_COLORS
-        baseColor = baseColor * vertexColor;
+        baseColor = baseColor * fsIn.vertexColor;
     #endif // HAS_VERTEX_COLORS
 
-    vec3 surfaceToCamera = -normalize(surfacePosVS);
+    vec3 surfaceToCamera = -normalize(fsIn.surfacePosVS);
     float metallic = metallicRoughness.x;
     float roughness = metallicRoughness.y;
     vec3 F0 = vec3(0.04); 
@@ -174,13 +183,15 @@ void main()
 
     vec3 finalColor = vec3(0.0);
 
+    // TODO: currently using non-constant expression (i) to index into sampler arrays, and this is not allowed
+    // in GL < 4.0: https://stackoverflow.com/questions/12030711/glsl-array-of-textures-of-differing-size/12031821#12031821
     for (int i = 0; i < numPointLights; i++) {
         // PointLight light = pointLight[i];
-        float surfaceToLightDistance = length(pointLight[i].positionVS - surfacePosVS);
+        float surfaceToLightDistance = length(pointLight[i].positionVS - fsIn.surfacePosVS);
         if (surfaceToLightDistance > pointLight[i].range) {
             continue;
         }
-        vec3 surfaceToLight = normalize(pointLight[i].positionVS - surfacePosVS);
+        vec3 surfaceToLight = normalize(pointLight[i].positionVS - fsIn.surfacePosVS);
         vec3 H = normalize(surfaceToCamera + surfaceToLight);
         float attenuation = 1.0 / (surfaceToLightDistance * surfaceToLightDistance);
         vec3 radiance = pointLight[i].color * attenuation * pointLight[i].intensity;
@@ -194,28 +205,31 @@ void main()
         float denominator = 4.0 * max(dot(unitNormal, surfaceToCamera), 0.0) * max(dot(unitNormal, surfaceToLight), 0.0) + 0.0001;
         vec3 specular = numerator / denominator;
         float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
-        vec3 lightToSurfaceWS = normalize(vec3(viewToWorld * vec4(-surfaceToLight, 0.0)));
-        const float bias = 0.001;
-        vec4 cubeMapCoord = vec4(lightToSurfaceWS, (surfaceToLightDistance / pointLight[i].depthCubemapFarPlane) - bias);
-        // float closestDepth = texture(depthCubemaps[i], lightToSurfaceWS).r; // [0, 1]
-        // closestDepth *= pointLight[i].depthCubemapFarPlane; // [0, far] and can be compared with sToLDistance
-        // float shadow = surfaceToLightDistance - bias > closestDepth ? 1.0 : 0.0;
+        vec3 lightToSurfaceWS = (vec3(viewToWorld * vec4((fsIn.surfacePosVS - pointLight[i].positionVS), 0.0)));
+        
+        // view transformation preserves distance so this distance is the same as world space distance
+        // float lightToSurfaceDepth = surfaceToLightDistance / pointLight[i].depthCubemapFarPlane;
+
+        float lightToSurfaceDepth = abs(lightToSurfaceWS.z) / pointLight[i].depthCubemapFarPlane;
+
+        // const float bias = 0.0001;
+        vec4 cubeMapCoord = vec4(lightToSurfaceWS, lightToSurfaceDepth - bias);
         float shadow = texture(depthCubemaps[i], cubeMapCoord);
         vec3 color = geometryTerm * radiance * shadow * (kD * baseColor.rgb / PI + specular);
         vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;
         color += ambient;
         finalColor += color;
-        // finalColor = vec3(closestDepth) / pointLight[i].depthCubemapFarPlane;
     }
 
     for (int i = 0; i < numSpotLights; i++)
     {
         SpotLight light = spotLight[i];
-        float surfaceToLightDistance = length(light.positionVS - surfacePosVS);
+        float surfaceToLightDistance = length(light.positionVS - fsIn.surfacePosVS);
+        // TODO: do this for angle as well?
         if (surfaceToLightDistance > light.range) {
             continue;
         }
-        vec3 surfaceToLight = normalize(light.positionVS - surfacePosVS);
+        vec3 surfaceToLight = normalize(light.positionVS - fsIn.surfacePosVS);
         vec3 H = normalize(surfaceToCamera + surfaceToLight);
         float distanceAttenuation = 1.0 / (surfaceToLightDistance * surfaceToLightDistance);
         // https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_lights_punctual/README.md#inner-and-outer-cone-angles
@@ -233,7 +247,9 @@ void main()
         float denominator = 4.0 * max(dot(unitNormal, surfaceToCamera), 0.0) * max(dot(unitNormal, surfaceToLight), 0.0) + 0.0001;
         vec3 specular = numerator / denominator;
         float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
-        vec3 color = geometryTerm * radiance * (kD * baseColor.rgb / PI + specular);
+
+        float shadow = textureProj(depthMaps[i], fsIn.surfacePosShadowMapUVSpace[i]);
+        vec3 color = geometryTerm * radiance * shadow * (kD * baseColor.rgb / PI + specular);
         vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;
         color += ambient;
         finalColor += color;

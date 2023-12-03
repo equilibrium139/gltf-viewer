@@ -303,37 +303,38 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 		globalTransforms.emplace_back();
 		Entity& pointLightEntity = entities.back();
 		pointLightEntity.name = "DefaultPointLightEntity";
-		pointLightEntity.transform.translation = glm::vec3(0.0f, 3.0f, 0.0f);
+		pointLightEntity.transform.translation = glm::vec3(0.0f, 0.25f, 0.0f);
 		pointLightEntity.transform.scale = glm::vec3(1.0f); // TODO: make lights independent of entity scale
 		Light pointLight{
 			.type = Light::Point, 
 			.color = glm::vec3(1.0f, 0.0f, 0.0f), 
-			.intensity = 50.0f,
-			.range = 50.0f,
+			.intensity = 3.0f,
+			.range = 3.0f,
+			.depthmapFarPlane = 5.0f,
 			.entityIdx = entityIdx
 		};
 		lights.push_back(pointLight);
 		pointLightEntity.lightIdx = 0;
 
-		/*entityIdx++;
+		entityIdx++;
 		entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& spotLightEntity = entities.back();
 		spotLightEntity.name = "DefaultSpotLightEntity";
-		spotLightEntity.transform.translation = glm::vec3(0.0f, 0.5f, 5.0f);
-		spotLightEntity.transform.rotation = glm::quat(glm::vec3(0.0f, glm::radians(180.0f), 0.0f));
+		spotLightEntity.transform.translation = glm::vec3(0.0f, 0.4f, 0.7f);
+		spotLightEntity.transform.rotation = glm::quat(glm::vec3(glm::radians(156.0f), 0.0f, 0.0f));
 		spotLightEntity.transform.scale = glm::vec3(1.0f);
 		Light spotLight{
 			.type = Light::Spot,
-			.color = glm::vec3(0.0f, 1.0f, 0.0f),
+			.color = glm::vec3(0.7f, 0.7f, 0.7f),
 			.intensity = 50.0f,
 			.range = 50.0f,
 			.innerAngleCutoffDegrees = 10.0f,
-			.outerAngleCutoffDegrees = 50.0f,
+			.outerAngleCutoffDegrees = 15.3f,
 			.entityIdx = entityIdx
 		};
 		lights.push_back(spotLight);
-		spotLightEntity.lightIdx = 1;*/
+		spotLightEntity.lightIdx = 1;
 
 		/*entityIdx++;
 		entities.emplace_back();
@@ -383,6 +384,8 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthCubemapTexture, 0);
 			glDrawBuffer(GL_NONE);
 			glReadBuffer(GL_NONE);
+			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+				std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		}
 		else
@@ -394,14 +397,21 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			glBindTexture(GL_TEXTURE_2D, depthTexture);
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadowMapWidth, shadowMapHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+			// TODO: fix this boyo!!!
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
 
 			glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTexture, 0);
 			glDrawBuffer(GL_NONE);
 			glReadBuffer(GL_NONE);
+			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+				std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		}
 	}
 }
@@ -416,8 +426,21 @@ void Scene::Render(int windowWidth, int windowHeight)
 	const float aspectRatio = windowHeight > 0 ? (float)windowWidth / (float)windowHeight : 1.0f;
 	const auto projection = currentCamera->GetProjectionMatrix(aspectRatio);
 
-	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	glViewport(0, 0, texW, texH);
+	// TODO: fix up boy!!!
+	 glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	 glViewport(0, 0, texW, texH);
+	//glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	//glViewport(0, 0, texW, texH);
+
+	// TODO: remove
+	/*Shader shader = Shader("Shaders/fullscreen.vert", "Shaders/shadowMapVisualizer.frag");
+	shader.use();
+	glBindVertexArray(fullscreenQuadVAO);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, depthMaps[0]);
+	shader.SetInt("depthMap", 0);
+	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+	return;*/
 	
 	std::int32_t numLights[3] = { 0, 0, 0 };
 	std::vector<PointLight> pointLights;
@@ -485,8 +508,10 @@ void Scene::Render(int windowWidth, int windowHeight)
 		{
 			Shader& shader = resources.GetOrCreateShader(submesh.flags, submesh.flatShading);
 			shader.use();
-			shader.SetMat4("modelView", glm::value_ptr(modelView));
+			shader.SetMat4("world", glm::value_ptr(globalTransform));
+			shader.SetMat4("view", glm::value_ptr(view));
 			shader.SetMat4("viewToWorld", glm::value_ptr(viewToWorld));
+			shader.SetFloat("bias", bias); // TODO: get rid of this nonsense
 			shader.SetMat4("projection", glm::value_ptr(projection));
 			bool hasNormals = HasFlag(submesh.flags, VertexAttribute::NORMAL);
 			int textureUnit = 0;
@@ -494,32 +519,107 @@ void Scene::Render(int windowWidth, int windowHeight)
 			{
 				glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelView)));
 				shader.SetMat3("normalMatrixVS", glm::value_ptr(normalMatrix));
-				shader.SetVec3("pointLight.positionVS", glm::vec3(0.0f, 0.0f, 0.0f));
-				shader.SetVec3("pointLight.color", glm::vec3(0.5f, 0.5f, 0.5f));
+
 				int numCubemaps = 0;
 				int num2Dmaps = 0;
-				for (int i = 0; i < lights.size(); i++)
+				int depthCubemapSamplers[Shader::maxPointLights];
+				int depthMapSamplers[Shader::maxSpotLights + Shader::maxDirLights];
+				for (int lightIdx = 0; lightIdx < lights.size(); lightIdx++)
 				{
-					const Light& light = lights[i];
+					const Light& light = lights[lightIdx];
 					if (light.type == Light::Point)
 					{
 						glActiveTexture(GL_TEXTURE0 + textureUnit);
-						glBindTexture(GL_TEXTURE_CUBE_MAP, depthMaps[i]);
-						std::string uniformName = "depthCubemaps[" + std::to_string(numCubemaps) + "]";
-						shader.SetInt(uniformName.c_str(), textureUnit);
+						glBindTexture(GL_TEXTURE_CUBE_MAP, depthMaps[lightIdx]);
+						depthCubemapSamplers[numCubemaps] = textureUnit;
 						textureUnit++;
 						numCubemaps++;
 					}
 					else
 					{
 						glActiveTexture(GL_TEXTURE0 + textureUnit);
-						glBindTexture(GL_TEXTURE_2D, depthMaps[i]);
-						std::string uniformName = "depthMaps[" + std::to_string(num2Dmaps) + "]";
-						shader.SetInt(uniformName.c_str(), textureUnit);
+						glBindTexture(GL_TEXTURE_2D, depthMaps[lightIdx]);
+						depthMapSamplers[num2Dmaps] = textureUnit;
 						textureUnit++;
+
+						glm::mat4 projection;
+						float nearPlane = light.depthmapNearPlane;
+						float farPlane = light.depthmapFarPlane;
+						// TODO: set these matrices once (doing it twice, once here and once in RenderShadowMaps)
+						if (light.type == Light::Spot)
+						{
+							projection = glm::perspective(glm::radians(light.depthmapFOV), (float)shadowMapWidth / (float)shadowMapHeight, nearPlane, farPlane);
+						}
+						else 
+						{
+							assert(light.type == Light::Directional);
+							// TODO: heuristic, fix later
+							projection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, farPlane);
+						}
+
+						// TODO: make bias tweakable
+						//const float bias = 0.0001f;
+						glm::mat4 translationWithBias = glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.5f - bias));
+						glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
+						// TODO: change to lookAt
+						// TODO: compute these matrices before rendering
+						glm::mat4& lightToWorld = globalTransforms[light.entityIdx];
+						glm::vec3 lightPositionWS = lightToWorld[3];
+						glm::vec3 forward = glm::normalize(lightToWorld[2]);
+						assert(forward != glm::vec3(0.0f, 1.0f, 0.0f));
+						glm::mat4 worldToLight = glm::lookAt(lightPositionWS, lightPositionWS + forward, glm::vec3(0.0f, 1.0f, 0.0f));
+						glm::mat4 worldToShadowMapUV = translationWithBias * scale * projection * worldToLight;
+
+						std::string worldToShadowMapUniformName = "worldToShadowMapUVSpace[" + std::to_string(num2Dmaps) + "]";
+						shader.SetMat4(worldToShadowMapUniformName.c_str(), glm::value_ptr(worldToShadowMapUV), 1); // TODO: set them all at once
 						num2Dmaps++;
 					}
 				}
+
+				// Bind unassigned samplers to dummy/already bound textures so we don't get an invalid texture access error
+				if (numCubemaps < Shader::maxPointLights)
+				{
+					int placeholderTexture;
+					if (numCubemaps > 0) // We can just assign the rest of the cubemaps to an already bound cubemap and no need to use a texture slot on a dummy texture
+					{
+						placeholderTexture = depthCubemapSamplers[0];
+					}
+					else
+					{
+						glActiveTexture(GL_TEXTURE0 + textureUnit);
+						glBindTexture(GL_TEXTURE_CUBE_MAP, resources.textures[resources.depth1x1Cubemap].id);
+						placeholderTexture = textureUnit;
+						textureUnit++;
+					}
+
+					for (int i = numCubemaps; i < Shader::maxPointLights; i++)
+					{
+						depthCubemapSamplers[i] = placeholderTexture;
+					}
+				}
+				if (num2Dmaps < Shader::maxSpotLights + Shader::maxDirLights)
+				{
+					int placeholderTexture;
+					if (num2Dmaps > 0)
+					{
+						placeholderTexture = depthMapSamplers[0];
+					}
+					else
+					{
+						glActiveTexture(GL_TEXTURE0 + textureUnit);
+						glBindTexture(GL_TEXTURE_2D, resources.textures[resources.max1x1RedIndex].id);
+						placeholderTexture = textureUnit;
+						textureUnit++;
+					}
+
+					for (int i = num2Dmaps; i < Shader::maxSpotLights + Shader::maxDirLights; i++)
+					{
+						depthMapSamplers[i] = placeholderTexture;
+					}
+				}
+
+				shader.SetIntArray("depthCubemaps", depthCubemapSamplers, Shader::maxPointLights);
+				shader.SetIntArray("depthMaps", depthMapSamplers, Shader::maxSpotLights + Shader::maxDirLights);
 			}
 			if (entity.skeletonIdx >= 0)
 			{
@@ -677,19 +777,19 @@ void Scene::Render(int windowWidth, int windowHeight)
 
 void Scene::RenderShadowMaps(const glm::mat4& view)
 {
-	for (int i = 0; i < lights.size(); i++)
+	for (int lightIdx = 0; lightIdx < lights.size(); lightIdx++)
 	{
-		const Light& light = lights[i];
-		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBOs[i]);
+		const Light& light = lights[lightIdx];
+		glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBOs[lightIdx]);
 		glViewport(0, 0, shadowMapWidth, shadowMapHeight);
 		glClear(GL_DEPTH_BUFFER_BIT);
 
 		glm::mat4 projection;
-		float nearPlane = 1.0f;
-		float farPlane = 25.0f;
+		float nearPlane = light.depthmapNearPlane;
+		float farPlane = light.depthmapFarPlane; // TODO: set to light far plane or light range value in Light struct
 		if (light.type != Light::Directional)
 		{
-			float fov = light.type == Light::Point ? 90.0f : light.outerAngleCutoffDegrees;
+			float fov = light.type == Light::Point ? 90.0f : light.depthmapFOV;
 			projection = glm::perspective(glm::radians(fov), (float)shadowMapWidth / (float)shadowMapHeight, nearPlane, farPlane);
 		}
 		else
@@ -699,29 +799,12 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 		}
 
 		glm::mat4& lightToWorld = globalTransforms[light.entityIdx];
-		glm::vec3 lightToWorldX = glm::normalize(lightToWorld[0]);
-		glm::vec3 lightToWorldY = glm::normalize(lightToWorld[1]);
-		glm::vec3 lightToWorldZ = glm::normalize(lightToWorld[2]);
 		glm::vec3 lightPositionWS = lightToWorld[3];
 
-		glm::vec4 translation;
-		if (light.type != Light::Directional)
+		for (int entityIdx = 0; entityIdx < entities.size(); entityIdx++)
 		{
-			glm::vec3 lightPositionVS = view * glm::vec4(lightPositionWS, 1.0);
-			translation = glm::vec4(-lightPositionVS, 1.0f);
-		}
-		else
-		{
-			// TODO: heuristic, fix later
-			translation = glm::vec4(lightToWorldZ * 10.0f, 1.0f);
-		}
-
-		GLuint shadowMapFBO = depthMapFBOs[i];
-
-		for (int i = 0; i < entities.size(); i++)
-		{
-			Entity& entity = entities[i];
-			glm::mat4& entityGlobalTransform = globalTransforms[i];
+			Entity& entity = entities[entityIdx];
+			glm::mat4& entityGlobalTransform = globalTransforms[entityIdx];
 			if (entity.meshIdx >= 0)
 			{
 				Mesh& mesh = resources.meshes[entity.meshIdx];
@@ -751,13 +834,11 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 					}
 					else
 					{
-						glm::vec4 worldToLightX{ lightToWorldX[0], lightToWorldY[0], lightToWorldZ[0], 0.0f };
-						glm::vec4 worldToLightY{ lightToWorldX[1], lightToWorldY[1], lightToWorldZ[1], 0.0f };
-						glm::vec4 worldToLightZ{ lightToWorldX[2], lightToWorldY[2], lightToWorldZ[2], 0.0f };
-						glm::mat4 worldToLight{ worldToLightX, worldToLightY, worldToLightZ, translation };
-						glm::mat4 worldLight = worldToLight * entityGlobalTransform;
-						depthShader.SetMat4("worldLight", glm::value_ptr(worldLight));
-						depthShader.SetMat4("projection", glm::value_ptr(projection));
+						glm::vec3 forward = glm::normalize(lightToWorld[2]);
+						assert(forward != glm::vec3(0.0f, 1.0f, 0.0f));
+						glm::mat4 worldToLight = glm::lookAt(lightPositionWS, lightPositionWS + forward, glm::vec3(0.0f, 1.0f, 0.0f));
+						glm::mat4 worldLightProjection = projection * worldToLight * entityGlobalTransform;
+						depthShader.SetMat4("worldLightProjection", glm::value_ptr(worldLightProjection));
 					}
 					if (entity.skeletonIdx >= 0)
 					{
@@ -844,8 +925,12 @@ void Scene::RenderUI()
 
 		if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen))
 		{
-			ImGui::DragFloat3("Translation", &selectedEntity.transform.translation.x, 0.1f);
-			ImGui::DragFloat4("Rotation(quat)", &selectedEntity.transform.rotation.x); // TODO: make this reasonable
+			// TODO: make speed based on scene size/adjustable by user
+			ImGui::DragFloat3("Translation", &selectedEntity.transform.translation.x, 0.01f);
+			glm::vec3 euler = glm::degrees(glm::eulerAngles(selectedEntity.transform.rotation));
+			ImGui::DragFloat3("Rotation", &euler.x, 0.1f);
+			selectedEntity.transform.rotation = glm::quat(glm::radians(euler));
+			//ImGui::DragFloat4("Rotation(quat)", &selectedEntity.transform.rotation.x); // TODO: make this reasonable
 			ImGui::DragFloat3("Scale", &selectedEntity.transform.scale.x, 0.1f);
 		}
 
@@ -869,7 +954,12 @@ void Scene::RenderUI()
 				{
 					ImGui::DragFloat("Inner cone angle", &light.innerAngleCutoffDegrees, 0.1f, 0.0f, light.outerAngleCutoffDegrees - 0.1f);
 					ImGui::DragFloat("Outer cone angle", &light.outerAngleCutoffDegrees, 0.1f, light.innerAngleCutoffDegrees + 0.1f, 90.0f);
+					ImGui::InputFloat("Depth Map FOV", &light.depthmapFOV, 0.1f);
 				}
+
+				//ImGui::InputFloat("Depth Map Near", &light.depthmapNearPlane, 0.000001f, );
+				ImGui::InputFloat("Depth Map Far", &light.depthmapFarPlane, 0.01f);
+				ImGui::InputFloat("Da bias", &bias); // TODO: get rid of this nonsense
 			}
 		}
 

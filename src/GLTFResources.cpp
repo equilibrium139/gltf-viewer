@@ -129,6 +129,9 @@ GLTFResources::GLTFResources(const tinygltf::Model& model)
 	max1x1RedIndex = textures.size();
 	textures.emplace_back(Texture::Max1x1TextureRed());
 
+	depth1x1Cubemap = textures.size();
+	textures.emplace_back(Texture::DepthCubemap1x1());
+
 	for (const tinygltf::Material& gltfMaterial : model.materials)
 	{
 		materials.emplace_back(FromGltfMaterial(gltfMaterial, model, white1x1RGBAIndex, max1x1RedIndex));
@@ -169,7 +172,6 @@ Shader& GLTFResources::GetOrCreateDepthShader(VertexAttribute attributes, bool d
 			return pair.second;
 		}
 	}
-	// TODO: point light depth shader
 	auto defines = GetShaderDefines(relevantAttributes, false);
 	if (!depthCubemap)
 	{

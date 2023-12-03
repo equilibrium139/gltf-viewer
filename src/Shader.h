@@ -21,8 +21,8 @@ class Shader
 {
 public:
 	unsigned int id;
-	static constexpr int maxPointLights = 25;
-	static constexpr int maxSpotLights = 25;
+	static constexpr int maxPointLights = 5;
+	static constexpr int maxSpotLights = 5;
 	static constexpr int maxDirLights = 5;
 	Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath = nullptr, const std::vector<UniformBlockBinding>& ub_bindings = {},
 		const std::vector<std::string> defines = {});
@@ -55,6 +55,10 @@ private:
 			return iter->second;
 		}
 		int location = glGetUniformLocation(id, name.c_str());
+		if (location < 0)
+		{
+			std::cerr << "Warning: GetUniformLocation attempting to access invalid uniform '" << name << "'\n";
+		}
 		//assert(location >= 0);
 		cachedUniformLocations[name] = location;
 		return location;

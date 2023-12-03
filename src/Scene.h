@@ -39,7 +39,7 @@ private:
 	std::vector<Skeleton> skeletons;
 	std::vector<Camera> cameras;
 	std::vector<Light> lights;
-	std::vector<GLuint> depthMapFBOs;
+	std::vector<GLuint> depthMapFBOs; // TODO: sync these to lights in a smarter way. Switching light type poses problems for how it's currently being done
 	std::vector<GLuint> depthMaps;
 	std::vector<std::uint8_t> animationEnabled; // avoiding vector<bool> to allow imgui to have bool references to elements 
 	Camera controllableCamera;
@@ -53,14 +53,15 @@ private:
 		.maxXYZ = glm::vec3(-FLT_MAX),
 	};
 	GLuint fbo;
-	GLuint fullscreenQuadVAO;
+	GLuint fullscreenQuadVAO; // TODO: remove
 	GLuint colorTexture;
 	GLuint highlightTexture;
 	GLuint depthStencilRBO;
 	GLuint lightsUBO;
-	int texW, texH;
+	int texW, texH; // TODO: fix this nonsensical naming
 	bool firstFrame = true;
+	float bias = 0.0001f; // TODO: get rid of this nonsense
 	// TODO: make shadow map size tweakable? And in general allow for shadow options like toggling shadows
-	static constexpr int shadowMapWidth = 2048;
-	static constexpr int shadowMapHeight = 2048;
+	static constexpr int shadowMapWidth = 1024;
+	static constexpr int shadowMapHeight = 1024;
 };

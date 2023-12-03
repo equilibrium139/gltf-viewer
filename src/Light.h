@@ -21,7 +21,9 @@ struct Light {
 	float range = 10.0f;
 	float innerAngleCutoffDegrees = 0.0f;
 	float outerAngleCutoffDegrees = 45.0f;
-	float depthmapFarPlane = 25.0f;
+	float depthmapFOV = 45.0f;
+	float depthmapNearPlane = 0.001f;
+	float depthmapFarPlane = 50.0f;
 	int entityIdx; // must be >= 0
 };
 

@@ -22,6 +22,23 @@ void FramebufferSizeCallback(GLFWwindow*, int width, int height)
     windowHeight = height;
 }
 
+//void GLAPIENTRY
+//MessageCallback(GLenum source,
+//    GLenum type,
+//    GLuint id,
+//    GLenum severity,
+//    GLsizei length,
+//    const GLchar* message,
+//    const void* userParam)
+//{
+//    if (type == GL_DEBUG_TYPE_ERROR)
+//    {
+//        fprintf(stderr, "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n",
+//            (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""),
+//            type, severity, message);
+//    }
+//}
+
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
     if (key == GLFW_KEY_N && action == GLFW_PRESS)
@@ -152,6 +169,9 @@ int main(int argc, char** argv)
 		printf("Failed to initialize GLAD\n");
 		return -1;
 	}    
+
+    //glEnable(GL_DEBUG_OUTPUT);
+    //glDebugMessageCallback(MessageCallback, 0);
 
     glViewport(0, 0, windowWidth, windowHeight);
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
@@ -299,9 +319,9 @@ int main(int argc, char** argv)
     glGenBuffers(1, &lightsUBO);
     glBindBuffer(GL_UNIFORM_BUFFER, lightsUBO);
     glBufferData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight) + Shader::maxSpotLights * sizeof(SpotLight) + Shader::maxDirLights * sizeof(DirectionalLight) + 3 * sizeof(int), NULL, GL_STATIC_DRAW);
-    glBindBufferBase(GL_UNIFORM_BUFFER, 1, lightsUBO);
+    glBindBufferBase(GL_UNIFORM_BUFFER, 1, lightsUBO);    
 
-    while (sampleModelNames[selectedModelIndex] != "InterpolationTest")
+    while (sampleModelNames[selectedModelIndex] != "ABeautifulGame")
     {
         selectedModelIndex++;
     }
@@ -392,6 +412,18 @@ int main(int argc, char** argv)
         if (selectedScene) postprocessShader.SetFloat("exposure", selectedScene->exposure);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
+        // TODO: remove this nonsense
+        /*glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, windowWidth, windowHeight);
+        glBindVertexArray(fullscreenQuadVAO);
+        Shader shader = Shader("Shaders/fullscreen.vert", "Shaders/shadowMapVisualizer.frag");
+        shader.use();
+        glBindVertexArray(fullscreenQuadVAO);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, colorTexture);
+        shader.SetInt("depthMap", 0);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);*/
+
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         static GLuint binaryImageClearValue = 0;
         static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
@@ -403,7 +435,6 @@ int main(int argc, char** argv)
         glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
