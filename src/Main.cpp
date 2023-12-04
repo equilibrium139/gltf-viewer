@@ -412,18 +412,6 @@ int main(int argc, char** argv)
         if (selectedScene) postprocessShader.SetFloat("exposure", selectedScene->exposure);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-        // TODO: remove this nonsense
-        /*glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, windowWidth, windowHeight);
-        glBindVertexArray(fullscreenQuadVAO);
-        Shader shader = Shader("Shaders/fullscreen.vert", "Shaders/shadowMapVisualizer.frag");
-        shader.use();
-        glBindVertexArray(fullscreenQuadVAO);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, colorTexture);
-        shader.SetInt("depthMap", 0);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);*/
-
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         static GLuint binaryImageClearValue = 0;
         static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);

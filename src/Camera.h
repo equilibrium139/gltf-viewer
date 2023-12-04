@@ -25,6 +25,7 @@ const float SENSITIVITY = 0.1f;
 const float ZOOM = 45.0f;
 const float NEAR = 0.001f;
 const float FAR = 1000.0f;
+const float ASPECT = 1920.0f / 1080.0f;
 
 
 class Camera
@@ -46,19 +47,21 @@ public:
     float zoom;
     float near;
     float far;
+    float aspectRatio;
 
     // constructor with vectors
-    Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f), float yaw = YAW, float pitch = PITCH, float near = NEAR, float far = FAR)
+    Camera(glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f), float yaw = YAW, float pitch = PITCH, float near = NEAR, float far = FAR, 
+           float aspectRatio = ASPECT)
         : position(position), front(glm::vec3(0.0f, 0.0f, -1.0f)), worldUp(up), yaw(yaw), pitch(pitch), movementSpeed(SPEED), mouseSensitivity(SENSITIVITY), zoom(ZOOM),
-        near(near), far(far)
+        near(near), far(far), aspectRatio(aspectRatio)
     {
         updateCameraVectors();
     }
 
     // constructor with scalar values
-    Camera(float posX, float posY, float posZ, float upX, float upY, float upZ, float yaw = YAW, float pitch = PITCH, float near = NEAR, float far = FAR)
+    Camera(float posX, float posY, float posZ, float upX, float upY, float upZ, float yaw = YAW, float pitch = PITCH, float near = NEAR, float far = FAR, float aspectRatio = ASPECT)
         : position(glm::vec3(posX, posY, posZ)), front(glm::vec3(0.0f, 0.0f, -1.0f)), worldUp(glm::vec3(upX, upY, upZ)), movementSpeed(SPEED), mouseSensitivity(SENSITIVITY),
-        zoom(ZOOM), yaw(yaw), pitch(pitch), near(near), far(far)
+        zoom(ZOOM), yaw(yaw), pitch(pitch), near(near), far(far), aspectRatio(aspectRatio)
     {
         updateCameraVectors();
     }
@@ -69,9 +72,9 @@ public:
         return glm::lookAt(position, position + front, up);
     }
 
-    glm::mat4 GetProjectionMatrix(float aspect) const
+    glm::mat4 GetProjectionMatrix() const
     {
-        return glm::perspective(glm::radians(zoom), aspect, near, far);
+        return glm::perspective(glm::radians(zoom), aspectRatio, near, far);
     }
 
     // processes input received from any keyboard-like input system. Accepts input parameter in the form of camera defined ENUM (to abstract it from windowing systems)

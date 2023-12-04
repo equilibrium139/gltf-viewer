@@ -245,6 +245,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			camera.zoom = glm::degrees(gltfCamera.perspective.yfov);
 			camera.near = gltfCamera.perspective.znear;
 			camera.far = gltfCamera.perspective.zfar;
+			camera.aspectRatio = gltfCamera.perspective.aspectRatio;
 		}
 	}
 	
@@ -423,24 +424,11 @@ void Scene::Render(int windowWidth, int windowHeight)
 	const auto viewToWorld = glm::inverse(view);
 	RenderShadowMaps(view);
 
-	const float aspectRatio = windowHeight > 0 ? (float)windowWidth / (float)windowHeight : 1.0f;
-	const auto projection = currentCamera->GetProjectionMatrix(aspectRatio);
+	//const float aspectRatio = windowHeight > 0 ? (float)windowWidth / (float)windowHeight : 1.0f;
+	const auto projection = currentCamera->GetProjectionMatrix();
 
-	// TODO: fix up boy!!!
-	 glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	 glViewport(0, 0, texW, texH);
-	//glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	//glViewport(0, 0, texW, texH);
-
-	// TODO: remove
-	/*Shader shader = Shader("Shaders/fullscreen.vert", "Shaders/shadowMapVisualizer.frag");
-	shader.use();
-	glBindVertexArray(fullscreenQuadVAO);
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_2D, depthMaps[0]);
-	shader.SetInt("depthMap", 0);
-	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-	return;*/
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0, 0, texW, texH);
 	
 	std::int32_t numLights[3] = { 0, 0, 0 };
 	std::vector<PointLight> pointLights;
@@ -748,7 +736,7 @@ void Scene::Render(int windowWidth, int windowHeight)
 		auto bboxPoints = sceneBoundingBox.GetPoints();
 		while (true)
 		{
-			glm::mat4 mvp = controllableCamera.GetProjectionMatrix(aspectRatio) * controllableCamera.GetViewMatrix();
+			glm::mat4 mvp = controllableCamera.GetProjectionMatrix() * controllableCamera.GetViewMatrix();
 			bool allPointsInCamView = true;
 			for (const glm::vec3& point : bboxPoints)
 			{
