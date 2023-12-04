@@ -60,7 +60,6 @@ private:
 	GLuint lightsUBO;
 	int texW, texH; // TODO: fix this nonsensical naming
 	bool firstFrame = true;
-	float bias = 0.0001f; // TODO: get rid of this nonsense
 	// TODO: make shadow map size tweakable? And in general allow for shadow options like toggling shadows
 	static constexpr int shadowMapWidth = 1024;
 	static constexpr int shadowMapHeight = 1024;

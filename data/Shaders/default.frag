@@ -12,6 +12,7 @@
         float intensity;
 
         float depthCubemapFarPlane;
+        float shadowMappingBias;
     };
 
     struct SpotLight
@@ -54,7 +55,6 @@
     uniform samplerCubeShadow depthCubemaps[MAX_NUM_POINT_LIGHTS];
     uniform sampler2DShadow depthMaps[MAX_NUM_SPOT_LIGHTS + MAX_NUM_DIR_LIGHTS];
     uniform mat4 viewToWorld;
-    uniform float bias; // TODO: get rid of this nonsense
 
     struct Material
     {
@@ -212,8 +212,7 @@ void main()
 
         float lightToSurfaceDepth = abs(lightToSurfaceWS.z) / pointLight[i].depthCubemapFarPlane;
 
-        // const float bias = 0.0001;
-        vec4 cubeMapCoord = vec4(lightToSurfaceWS, lightToSurfaceDepth - bias);
+        vec4 cubeMapCoord = vec4(lightToSurfaceWS, lightToSurfaceDepth - pointLight[i].shadowMappingBias);
         float shadow = texture(depthCubemaps[i], cubeMapCoord);
         vec3 color = geometryTerm * radiance * shadow * (kD * baseColor.rgb / PI + specular);
         vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;

@@ -24,6 +24,7 @@ struct Light {
 	float depthmapFOV = 45.0f;
 	float depthmapNearPlane = 0.001f;
 	float depthmapFarPlane = 50.0f;
+	float shadowMappingBias = 0.001f;
 	int entityIdx; // must be >= 0
 };
 
@@ -36,10 +37,11 @@ struct PointLight {
 	float intensity;
 
 	float depthCubemapFarPlane;
-	float pad0, pad1, pad2; 
+	float shadowMappingBias;
+	float pad0, pad1; 
 
-	PointLight(glm::vec3 color, glm::vec3 position, float range, float intensity, GLuint depthCubemapFarPlane)
-		:color(color), range(range), positionVS(position), intensity(intensity), depthCubemapFarPlane(depthCubemapFarPlane)  {}
+	PointLight(glm::vec3 color, glm::vec3 position, float range, float intensity, float depthCubemapFarPlane, float shadowMappingBias)
+		:color(color), range(range), positionVS(position), intensity(intensity), depthCubemapFarPlane(depthCubemapFarPlane), shadowMappingBias(shadowMappingBias)  {}
 };
 
 struct SpotLight {

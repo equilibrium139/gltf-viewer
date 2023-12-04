@@ -305,7 +305,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 		Entity& pointLightEntity = entities.back();
 		pointLightEntity.name = "DefaultPointLightEntity";
 		pointLightEntity.transform.translation = glm::vec3(0.0f, 0.25f, 0.0f);
-		pointLightEntity.transform.scale = glm::vec3(1.0f); // TODO: make lights independent of entity scale
+		pointLightEntity.transform.scale = glm::vec3(1.0f);
 		Light pointLight{
 			.type = Light::Point, 
 			.color = glm::vec3(1.0f, 0.0f, 0.0f), 
@@ -398,7 +398,6 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			glBindTexture(GL_TEXTURE_2D, depthTexture);
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadowMapWidth, shadowMapHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
 
-			// TODO: fix this boyo!!!
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
@@ -445,7 +444,7 @@ void Scene::Render(int windowWidth, int windowHeight)
 		switch (light.type) 
 		{
 		case Light::Point:
-			pointLights.emplace_back(light.color, lightPosVS, light.range, light.intensity, light.depthmapFarPlane);
+			pointLights.emplace_back(light.color, lightPosVS, light.range, light.intensity, light.depthmapFarPlane, light.shadowMappingBias);
 			numLights[0]++;
 			break;
 		case Light::Spot:
@@ -499,7 +498,6 @@ void Scene::Render(int windowWidth, int windowHeight)
 			shader.SetMat4("world", glm::value_ptr(globalTransform));
 			shader.SetMat4("view", glm::value_ptr(view));
 			shader.SetMat4("viewToWorld", glm::value_ptr(viewToWorld));
-			shader.SetFloat("bias", bias); // TODO: get rid of this nonsense
 			shader.SetMat4("projection", glm::value_ptr(projection));
 			bool hasNormals = HasFlag(submesh.flags, VertexAttribute::NORMAL);
 			int textureUnit = 0;
@@ -547,7 +545,7 @@ void Scene::Render(int windowWidth, int windowHeight)
 
 						// TODO: make bias tweakable
 						//const float bias = 0.0001f;
-						glm::mat4 translationWithBias = glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.5f - bias));
+						glm::mat4 translationWithBias = glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.5f - light.shadowMappingBias));
 						glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
 						// TODO: change to lookAt
 						// TODO: compute these matrices before rendering
@@ -947,7 +945,7 @@ void Scene::RenderUI()
 
 				//ImGui::InputFloat("Depth Map Near", &light.depthmapNearPlane, 0.000001f, );
 				ImGui::InputFloat("Depth Map Far", &light.depthmapFarPlane, 0.01f);
-				ImGui::InputFloat("Da bias", &bias); // TODO: get rid of this nonsense
+				ImGui::InputFloat("Shadow Mapping Bias", &light.shadowMappingBias, 0.0001f);
 			}
 		}
 
