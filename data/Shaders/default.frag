@@ -42,7 +42,7 @@
     // #define MAX_NUM_SPOT_LIGHTS 25
     // #define MAX_NUM_DIR_LIGHTS 5
 
-    layout (std140) uniform Lights {
+    layout (std140, binding=1) uniform Lights {
         PointLight pointLight[MAX_NUM_POINT_LIGHTS];
         SpotLight spotLight[MAX_NUM_SPOT_LIGHTS];
         DirectionalLight dirLight[MAX_NUM_DIR_LIGHTS];

@@ -1,8 +1,8 @@
 #include "Shader.h"
 
-Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * geometryPath, const std::vector<UniformBlockBinding>& ub_bindings, const std::vector<std::string> defines)
+Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * geometryPath, const std::vector<std::string> defines)
 {
-	static const std::string version = "#version 330 core\n";
+	static const std::string version = "#version 430 core\n";
 
 	unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
 	unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -38,7 +38,7 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	if (!success)
 	{
 		glGetShaderInfoLog(vertexShader, sizeof(infoLog), NULL, infoLog);
-		std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
+		std::cout << "Error compiling vertex shader '" << vertexPath << "'\n" << infoLog << std::endl;
 		//std::cout << "Vertex shader source:\n" << version + defaultDefinesString + definesString + vShaderCode;
 		// TODO find a solution for this. It's affecting the next Shader object created
 		// when this one fails
@@ -49,7 +49,7 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	if (!success)
 	{
 		glGetShaderInfoLog(fragmentShader, sizeof(infoLog), NULL, infoLog);
-		std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
+		std::cout << "Error compiling fragment shader '" << fragmentPath << "'\n" << infoLog << std::endl;
 		//std::cout << "Fragment shader source:\n" << version + defaultDefinesString + definesString + fShaderCode;
 	}
 
@@ -68,7 +68,7 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 		if (!success)
 		{
 			glGetShaderInfoLog(geomShader, sizeof(infoLog), NULL, infoLog);
-			std::cout << "ERROR::SHADER::GEOMETRY::COMPILATION_FAILED\n" << infoLog << std::endl;
+			std::cout << "Error compiling geometry shader '" << geometryPath << "'\n" << infoLog << std::endl;
 		}
 
 		glAttachShader(id, geomShader);
@@ -80,20 +80,15 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	if (!success)
 	{
 		glGetProgramInfoLog(id, sizeof(infoLog), NULL, infoLog);
-		std::cout << "ERROR::SHADER::PROGRAM::LINKING_FAILED\n" << infoLog << std::endl;
-		std::cout << "Vertex shader source:\n" << version + defaultDefinesString + definesString + vShaderCode << std::endl;
-		std::cout << "Fragment shader source:\n" << version + defaultDefinesString + definesString + fShaderCode << std::endl;
+		std::cout << "Error compiling shader program.\nVertex Shader: " << vertexPath << "\nFragment Shader: " << fragmentPath << "'\n" << infoLog << std::endl;
+		//std::cout << "Vertex shader source:\n" << version + defaultDefinesString + definesString + vShaderCode << std::endl;
+		//std::cout << "Fragment shader source:\n" << version + defaultDefinesString + definesString + fShaderCode << std::endl;
 	}
 
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
 	use();
-	for (const auto& binding : ub_bindings)
-	{
-		auto block_index = glGetUniformBlockIndex(id, binding.uniformBlockName.c_str());
-		glUniformBlockBinding(id, block_index, binding.uniformBlockBinding);
-	}
 }
 
 void Shader::use()

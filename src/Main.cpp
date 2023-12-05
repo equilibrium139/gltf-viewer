@@ -22,22 +22,22 @@ void FramebufferSizeCallback(GLFWwindow*, int width, int height)
     windowHeight = height;
 }
 
-//void GLAPIENTRY
-//MessageCallback(GLenum source,
-//    GLenum type,
-//    GLuint id,
-//    GLenum severity,
-//    GLsizei length,
-//    const GLchar* message,
-//    const void* userParam)
-//{
-//    if (type == GL_DEBUG_TYPE_ERROR)
-//    {
-//        fprintf(stderr, "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n",
-//            (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""),
-//            type, severity, message);
-//    }
-//}
+void GLAPIENTRY
+MessageCallback(GLenum source,
+    GLenum type,
+    GLuint id,
+    GLenum severity,
+    GLsizei length,
+    const GLchar* message,
+    const void* userParam)
+{
+    if (type == GL_DEBUG_TYPE_ERROR)
+    {
+        fprintf(stderr, "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n",
+            (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""),
+            type, severity, message);
+    }
+}
 
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
@@ -148,8 +148,8 @@ int main(int argc, char** argv)
     if (!glfwInit())
         return -1;
 
-    const char* glsl_version = "#version 330";
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    const char* glsl_version = "#version 430";
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
@@ -170,8 +170,8 @@ int main(int argc, char** argv)
 		return -1;
 	}    
 
-    //glEnable(GL_DEBUG_OUTPUT);
-    //glDebugMessageCallback(MessageCallback, 0);
+    glEnable(GL_DEBUG_OUTPUT);
+    glDebugMessageCallback(MessageCallback, 0);
 
     glViewport(0, 0, windowWidth, windowHeight);
     glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);

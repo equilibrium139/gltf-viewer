@@ -11,12 +11,6 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
-struct UniformBlockBinding
-{
-	std::string uniformBlockName;
-	GLuint uniformBlockBinding;
-};
-
 class Shader
 {
 public:
@@ -24,8 +18,7 @@ public:
 	static constexpr int maxPointLights = 5;
 	static constexpr int maxSpotLights = 5;
 	static constexpr int maxDirLights = 5;
-	Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath = nullptr, const std::vector<UniformBlockBinding>& ub_bindings = {},
-		const std::vector<std::string> defines = {});
+	Shader(const char* vertexPath, const char* fragmentPath, const char* geometryPath = nullptr, const std::vector<std::string> defines = {});
 
 
 	void use();
