@@ -27,7 +27,7 @@ void main()
     vec3 worldPosition = aBasePos;
 
 #ifdef HAS_JOINTS
-    vec4 modelSpaceVertex = vec4(surfacePosVS, 1.0);
+    vec4 modelSpaceVertex = vec4(worldPosition, 1.0);
     skinningMatrix = aWeights.x * skinningMatrices[aJoints & 0xFFu] +
                   aWeights.y * skinningMatrices[(aJoints >> 8) & 0xFFu] +
                   aWeights.z * skinningMatrices[(aJoints >> 16) & 0xFFu] +

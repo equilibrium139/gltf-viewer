@@ -149,13 +149,7 @@ Shader& GLTFResources::GetOrCreateShader(VertexAttribute attributes, bool flatSh
 		}
 	}
 	auto defines = GetShaderDefines(attributes, flatShading);
-	shaders.push_back({ { attributes, flatShading }, Shader("Shaders/default.vert", "Shaders/default.frag", nullptr,  
-		{
-			{
-				.uniformBlockName = "Lights",
-				.uniformBlockBinding = 1
-			},
-		}, defines)});
+	shaders.push_back({ { attributes, flatShading }, Shader("Shaders/default.vert", "Shaders/default.frag", nullptr, defines)});
 	return shaders.back().second;
 }
 
@@ -175,11 +169,11 @@ Shader& GLTFResources::GetOrCreateDepthShader(VertexAttribute attributes, bool d
 	auto defines = GetShaderDefines(relevantAttributes, false);
 	if (!depthCubemap)
 	{
-		depthShaders.push_back({ { relevantAttributes, false }, Shader("Shaders/depth.vert", "Shaders/empty.frag", nullptr, {}, defines) });
+		depthShaders.push_back({ { relevantAttributes, false }, Shader("Shaders/depth.vert", "Shaders/empty.frag", nullptr, defines) });
 	}
 	else
 	{
-		depthShaders.push_back({ { relevantAttributes, true }, Shader("Shaders/worldspace.vert", "Shaders/cubedepth.frag", "Shaders/cubedepth.geom", {}, defines)});
+		depthShaders.push_back({ { relevantAttributes, true }, Shader("Shaders/worldspace.vert", "Shaders/cubedepth.frag", "Shaders/cubedepth.geom", defines)});
 	}
 	return depthShaders.back().second;
 }
