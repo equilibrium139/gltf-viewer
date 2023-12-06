@@ -25,6 +25,7 @@ struct Light {
 	float depthmapNearPlane = 0.001f;
 	float depthmapFarPlane = 50.0f;
 	float shadowMappingBias = 0.001f;
+	glm::mat4 lightProjection;
 	int entityIdx; // must be >= 0
 };
 
