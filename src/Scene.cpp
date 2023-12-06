@@ -300,7 +300,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 	{
 		// TODO: sync entites and global transforms array in a cleaner way
 		int entityIdx = entities.size();
-		entities.emplace_back();
+		/*entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& pointLightEntity = entities.back();
 		pointLightEntity.name = "DefaultPointLightEntity";
@@ -315,10 +315,10 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(pointLight);
-		pointLightEntity.lightIdx = 0;
+		pointLightEntity.lightIdx = 0;*/
 
-		entityIdx++;
-		entities.emplace_back();
+		//entityIdx++;
+		/*entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& spotLightEntity = entities.back();
 		spotLightEntity.name = "DefaultSpotLightEntity";
@@ -329,29 +329,31 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.type = Light::Spot,
 			.color = glm::vec3(0.7f, 0.7f, 0.7f),
 			.intensity = 50.0f,
-			.range = 50.0f,
-			.innerAngleCutoffDegrees = 10.0f,
-			.outerAngleCutoffDegrees = 15.3f,
+			.range = 25.0f,
+			.innerAngleCutoffDegrees = 1.0f,
+			.outerAngleCutoffDegrees = 2.0f,
 			.entityIdx = entityIdx
 		};
 		lights.push_back(spotLight);
-		spotLightEntity.lightIdx = 1;
+		spotLightEntity.lightIdx = 0;*/
 
-		/*entityIdx++;
+		// entityIdx++;
 		entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& dirLightEntity = entities.back();
 		dirLightEntity.name = "DefaultDirectionalLightEntity";
-		dirLightEntity.transform.rotation = glm::quat(glm::vec3(glm::radians(90.0f), 0.0f, 0.0f));
-		dirLightEntity.transform.scale = glm::vec3(1.0f);
+		dirLightEntity.transform.translation = glm::vec3(0.0f, 0.3f, 0.0f); // TODO: replace magic numbers
+		dirLightEntity.transform.rotation = glm::quat(glm::vec3(glm::radians(126.0f), 0.0f, 0.0f));
+		dirLightEntity.transform.scale = glm::vec3(1.0f); // TODO: make light independent of scale
 		Light dirLight{
 			.type = Light::Directional,
 			.color = glm::vec3(0.0f, 0.0f, 1.0f),
 			.intensity = 100.0f,
+			.depthmapFarPlane = 10.0f,
 			.entityIdx = entityIdx
 		};
 		lights.push_back(dirLight);
-		dirLightEntity.lightIdx = 2;*/
+		dirLightEntity.lightIdx = 0;
 	}
 
 	depthMapFBOs.resize(lights.size());
@@ -419,6 +421,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 void Scene::Render(int windowWidth, int windowHeight)
 {
 	UpdateGlobalTransforms();
+	ComputeSceneBoundingBox(); 
 	const auto view = currentCamera->GetViewMatrix();
 	const auto viewToWorld = glm::inverse(view);
 	RenderShadowMaps(view);
@@ -501,10 +504,13 @@ void Scene::Render(int windowWidth, int windowHeight)
 			shader.SetMat4("projection", glm::value_ptr(projection));
 			bool hasNormals = HasFlag(submesh.flags, VertexAttribute::NORMAL);
 			int textureUnit = 0;
-			if (hasNormals) // TODO: also for flat shading
+			if (hasNormals || submesh.flatShading)
 			{
-				glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelView)));
-				shader.SetMat3("normalMatrixVS", glm::value_ptr(normalMatrix));
+				if (hasNormals)
+				{
+					glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelView)));
+					shader.SetMat3("normalMatrixVS", glm::value_ptr(normalMatrix));
+				}
 
 				int numCubemaps = 0;
 				int num2Dmaps = 0;
@@ -523,37 +529,54 @@ void Scene::Render(int windowWidth, int windowHeight)
 					}
 					else
 					{
-						glActiveTexture(GL_TEXTURE0 + textureUnit);
+						glActiveTexture(GL_TEXTURE0 + textureUnit);	
 						glBindTexture(GL_TEXTURE_2D, depthMaps[lightIdx]);
 						depthMapSamplers[num2Dmaps] = textureUnit;
 						textureUnit++;
 
+						glm::mat4& lightToWorld = globalTransforms[light.entityIdx];
+						glm::vec3 forward = glm::normalize(lightToWorld[2]);
+						glm::vec3 lightPositionWS = light.type == Light::Spot ? lightToWorld[3] : sceneBoundingBox.GetCenter() - 1000.0f * forward;
+						assert(forward != glm::vec3(0.0f, 1.0f, 0.0f));
+						glm::mat4 worldToLight = glm::lookAt(lightPositionWS, lightPositionWS + forward, glm::vec3(0.0f, 1.0f, 0.0f));
+
 						glm::mat4 projection;
-						float nearPlane = light.depthmapNearPlane;
-						float farPlane = light.depthmapFarPlane;
 						// TODO: set these matrices once (doing it twice, once here and once in RenderShadowMaps)
 						if (light.type == Light::Spot)
 						{
-							projection = glm::perspective(glm::radians(light.depthmapFOV), (float)shadowMapWidth / (float)shadowMapHeight, nearPlane, farPlane);
+							projection = glm::perspective(glm::radians(light.depthmapFOV), (float)shadowMapWidth / (float)shadowMapHeight, light.depthmapNearPlane, light.depthmapFarPlane);
 						}
 						else 
 						{
 							assert(light.type == Light::Directional);
 							// TODO: heuristic, fix later
-							projection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, farPlane);
+							float diagonal = glm::length(sceneBoundingBox.maxXYZ - sceneBoundingBox.minXYZ);
+							float frustumWidth = diagonal;
+							float frustumHeight = diagonal;
+							float farPlane = 0.0f;
+							float nearPlane = 10000.0f;
+							auto sceneBBVertices = sceneBoundingBox.GetVertices();
+							for (const glm::vec3& vertex : sceneBBVertices)
+							{
+								glm::vec3 vertexLightSpace = worldToLight * glm::vec4(vertex, 1.0f);
+								float vertexDepth = -vertexLightSpace.z;
+								if (vertexDepth > farPlane)
+								{
+									farPlane = vertexDepth;
+								}
+								if (vertexDepth < nearPlane)
+								{
+									nearPlane = vertexDepth;
+								}
+							}
+							projection = glm::ortho(-frustumWidth, frustumWidth, -frustumHeight, frustumHeight, nearPlane, farPlane);
 						}
 
 						// TODO: make bias tweakable
 						//const float bias = 0.0001f;
 						glm::mat4 translationWithBias = glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.5f - light.shadowMappingBias));
 						glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
-						// TODO: change to lookAt
 						// TODO: compute these matrices before rendering
-						glm::mat4& lightToWorld = globalTransforms[light.entityIdx];
-						glm::vec3 lightPositionWS = lightToWorld[3];
-						glm::vec3 forward = glm::normalize(lightToWorld[2]);
-						assert(forward != glm::vec3(0.0f, 1.0f, 0.0f));
-						glm::mat4 worldToLight = glm::lookAt(lightPositionWS, lightPositionWS + forward, glm::vec3(0.0f, 1.0f, 0.0f));
 						glm::mat4 worldToShadowMapUV = translationWithBias * scale * projection * worldToLight;
 
 						std::string worldToShadowMapUniformName = "worldToShadowMapUVSpace[" + std::to_string(num2Dmaps) + "]";
@@ -671,15 +694,6 @@ void Scene::Render(int windowWidth, int windowHeight)
 			{
 				glDrawArrays(GL_TRIANGLES, 0, submesh.countVerticesOrIndices);
 			}
-
-			// TODO: find better place for calculating scene bbox/non-rendering stuff
-			auto bboxWorldPoints = entityMesh.boundingBox.GetPoints();
-			for (glm::vec3& point : bboxWorldPoints)
-			{
-				point = globalTransform * glm::vec4(point, 1.0f);
-				sceneBoundingBox.minXYZ = glm::min(point, sceneBoundingBox.minXYZ);
-				sceneBoundingBox.maxXYZ = glm::max(point, sceneBoundingBox.maxXYZ);
-			}
 		}
 
 		if (entity.cameraIdx >= 0)
@@ -731,7 +745,7 @@ void Scene::Render(int windowWidth, int windowHeight)
 		}
 		controllableCamera.position = center + offsetFromCenter;
 		controllableCamera.LookAt(center);
-		auto bboxPoints = sceneBoundingBox.GetPoints();
+		auto bboxPoints = sceneBoundingBox.GetVertices();
 		while (true)
 		{
 			glm::mat4 mvp = controllableCamera.GetProjectionMatrix() * controllableCamera.GetViewMatrix();
@@ -770,22 +784,45 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 		glViewport(0, 0, shadowMapWidth, shadowMapHeight);
 		glClear(GL_DEPTH_BUFFER_BIT);
 
+		glm::mat4& lightToWorld = globalTransforms[light.entityIdx];
+		glm::vec3 forward = glm::normalize(lightToWorld[2]);
+		glm::vec3 lightPositionWS = light.type == Light::Spot ? lightToWorld[3] : sceneBoundingBox.GetCenter() - 1000.0f * forward;
+		assert(forward != glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 worldToLight = glm::lookAt(lightPositionWS, lightPositionWS + forward, glm::vec3(0.0f, 1.0f, 0.0f));
+
 		glm::mat4 projection;
-		float nearPlane = light.depthmapNearPlane;
-		float farPlane = light.depthmapFarPlane; // TODO: set to light far plane or light range value in Light struct
 		if (light.type != Light::Directional)
 		{
 			float fov = light.type == Light::Point ? 90.0f : light.depthmapFOV;
-			projection = glm::perspective(glm::radians(fov), (float)shadowMapWidth / (float)shadowMapHeight, nearPlane, farPlane);
+			projection = glm::perspective(glm::radians(fov), (float)shadowMapWidth / (float)shadowMapHeight, light.depthmapNearPlane, light.depthmapFarPlane);
 		}
 		else
 		{
 			// TODO: heuristic, fix later
-			projection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, farPlane);
+			float diagonal = glm::length(sceneBoundingBox.maxXYZ - sceneBoundingBox.minXYZ);
+			float frustumWidth = diagonal;
+			float frustumHeight = diagonal;
+			float farPlane = 0.0f;
+			float nearPlane = 10000.0f;
+			auto sceneBBVertices = sceneBoundingBox.GetVertices();
+			for (const glm::vec3& vertex : sceneBBVertices)
+			{
+				glm::vec3 vertexLightSpace = worldToLight * glm::vec4(vertex, 1.0f);
+				float vertexDepth = -vertexLightSpace.z; // camera looks into -z so convert to positive value to use as far plane
+				if (vertexDepth > farPlane)
+				{
+					farPlane = vertexDepth;
+				}
+				if (vertexDepth < nearPlane)
+				{
+					nearPlane = vertexDepth;
+				}
+			}
+			projection = glm::ortho(-frustumWidth, frustumWidth, -frustumHeight, frustumHeight, nearPlane, farPlane);
 		}
 
-		glm::mat4& lightToWorld = globalTransforms[light.entityIdx];
-		glm::vec3 lightPositionWS = lightToWorld[3];
+		glm::mat4 lightProjection = projection * worldToLight;
+
 
 		for (int entityIdx = 0; entityIdx < entities.size(); entityIdx++)
 		{
@@ -815,15 +852,12 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 						depthShader.SetMat4("lightProjectionMatrices[4]", glm::value_ptr(lightProjectionMatrices[4]));
 						depthShader.SetMat4("lightProjectionMatrices[5]", glm::value_ptr(lightProjectionMatrices[5]));
 						depthShader.SetMat4("world", glm::value_ptr(entityGlobalTransform));
-						depthShader.SetFloat("farPlane", farPlane);
+						depthShader.SetFloat("farPlane", light.depthmapFarPlane);
 						depthShader.SetVec3("lightPosWS", lightPositionWS);
 					}
 					else
 					{
-						glm::vec3 forward = glm::normalize(lightToWorld[2]);
-						assert(forward != glm::vec3(0.0f, 1.0f, 0.0f));
-						glm::mat4 worldToLight = glm::lookAt(lightPositionWS, lightPositionWS + forward, glm::vec3(0.0f, 1.0f, 0.0f));
-						glm::mat4 worldLightProjection = projection * worldToLight * entityGlobalTransform;
+						glm::mat4 worldLightProjection = lightProjection * entityGlobalTransform;
 						depthShader.SetMat4("worldLightProjection", glm::value_ptr(worldLightProjection));
 					}
 					if (entity.skeletonIdx >= 0)
@@ -944,8 +978,11 @@ void Scene::RenderUI()
 				}
 
 				//ImGui::InputFloat("Depth Map Near", &light.depthmapNearPlane, 0.000001f, );
-				ImGui::InputFloat("Depth Map Far", &light.depthmapFarPlane, 0.01f);
-				ImGui::InputFloat("Shadow Mapping Bias", &light.shadowMappingBias, 0.0001f);
+				if (light.type == Light::Spot || light.type == Light::Point)
+				{
+					ImGui::InputFloat("Depth Map Far", &light.depthmapFarPlane, 0.01f);
+					ImGui::InputFloat("Shadow Mapping Bias", &light.shadowMappingBias, 0.0001f);
+				}
 			}
 		}
 
@@ -1077,4 +1114,27 @@ bool Scene::IsParent(int entityChild, int entityParent)
 	}
 
 	return IsParent(entities[entityChild].parent, entityParent);
+}
+
+void Scene::ComputeSceneBoundingBox()
+{
+	for (int i = 0; i < entities.size(); i++)
+	{
+		const Entity& entity = entities[i];
+		if (entity.meshIdx < 0)
+		{
+			continue;
+		}
+		const glm::mat4& globalTransform = globalTransforms[i];
+		const Mesh& entityMesh = resources.meshes[entity.meshIdx];
+		auto bboxWorldPoints = entityMesh.boundingBox.GetVertices();
+
+		for (glm::vec3& point : bboxWorldPoints)
+		{
+			// TODO: this is probably fine for static meshes but animated ones might have larger bounding boxes, so maybe fix that
+			point = globalTransform * glm::vec4(point, 1.0f);
+			sceneBoundingBox.minXYZ = glm::min(point, sceneBoundingBox.minXYZ);
+			sceneBoundingBox.maxXYZ = glm::max(point, sceneBoundingBox.maxXYZ);
+		}
+	}
 }

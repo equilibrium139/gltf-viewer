@@ -246,7 +246,6 @@ void main()
         float denominator = 4.0 * max(dot(unitNormal, surfaceToCamera), 0.0) * max(dot(unitNormal, surfaceToLight), 0.0) + 0.0001;
         vec3 specular = numerator / denominator;
         float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
-
         float shadow = textureProj(depthMaps[i], fsIn.surfacePosShadowMapUVSpace[i]);
         vec3 color = geometryTerm * radiance * shadow * (kD * baseColor.rgb / PI + specular);
         vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;
@@ -272,7 +271,8 @@ void main()
         float denominator = 4.0 * max(dot(unitNormal, surfaceToCamera), 0.0) * max(dot(unitNormal, surfaceToLight), 0.0) + 0.0001;
         vec3 specular = numerator / denominator;
         float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
-        vec3 color = geometryTerm * radiance * (kD * baseColor.rgb / PI + specular);
+        float shadow = textureProj(depthMaps[i + numSpotLights], fsIn.surfacePosShadowMapUVSpace[i + numSpotLights]);
+        vec3 color = geometryTerm * radiance * shadow * (kD * baseColor.rgb / PI + specular);
         vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;
         color += ambient;
         finalColor += color;

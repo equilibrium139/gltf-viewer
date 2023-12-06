@@ -5,7 +5,7 @@
 struct BBox
 {
 	glm::vec3 minXYZ, maxXYZ;
-	std::array<glm::vec3, 8> GetPoints() const
+	std::array<glm::vec3, 8> GetVertices() const
 	{
 		glm::vec3 dims = maxXYZ - minXYZ;
 		return {

@@ -32,6 +32,7 @@ private:
 	void RenderBoundingBox(const BBox& bbox, const glm::mat4& mvp);
 	void UpdateGlobalTransforms();
 	void UpdateGlobalTransforms(int entityIdx, const glm::mat4& parentTransform);
+	void ComputeSceneBoundingBox();
 	bool IsParent(int entityChild, int entityParent);
 	std::vector<Animation> animations;
 	std::vector<Entity> entities;
@@ -61,6 +62,6 @@ private:
 	int texW, texH; // TODO: fix this nonsensical naming
 	bool firstFrame = true;
 	// TODO: make shadow map size tweakable? And in general allow for shadow options like toggling shadows
-	static constexpr int shadowMapWidth = 1024;
-	static constexpr int shadowMapHeight = 1024;
+	static constexpr int shadowMapWidth = 2048;
+	static constexpr int shadowMapHeight = 2048;
 };
