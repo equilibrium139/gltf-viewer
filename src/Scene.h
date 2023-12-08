@@ -33,6 +33,7 @@ private:
 	void UpdateGlobalTransforms();
 	void UpdateGlobalTransforms(int entityIdx, const glm::mat4& parentTransform);
 	void ComputeSceneBoundingBox();
+	void GenerateShadowMap(int lightIdx);
 	bool IsParent(int entityChild, int entityParent);
 	std::vector<Animation> animations;
 	std::vector<Entity> entities;

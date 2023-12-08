@@ -347,7 +347,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 		dirLightEntity.transform.scale = glm::vec3(1.0f); // TODO: make light independent of scale
 		Light dirLight{
 			.type = Light::Directional,
-			.color = glm::vec3(0.0f, 0.0f, 1.0f),
+			.color = glm::vec3(1.0f, 0.0f, 0.0f),
 			.intensity = 100.0f,
 			.depthmapFarPlane = 10.0f,
 			.entityIdx = entityIdx
@@ -395,7 +395,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 		{
 			GLuint fbo = depthMapFBOs[i];
 			glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-			
+
 			GLuint depthTexture = depthMaps[i];
 			glBindTexture(GL_TEXTURE_2D, depthTexture);
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadowMapWidth, shadowMapHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
@@ -516,6 +516,9 @@ void Scene::Render(int windowWidth, int windowHeight)
 				int num2Dmaps = 0;
 				int depthCubemapSamplers[Shader::maxPointLights];
 				int depthMapSamplers[Shader::maxSpotLights + Shader::maxDirLights];
+				std::fill_n(&depthMapSamplers[0], Shader::maxSpotLights + Shader::maxDirLights, -1);
+				int spotLightIdx = 0;
+				int dirLightIdx = 0;
 				for (int lightIdx = 0; lightIdx < lights.size(); lightIdx++)
 				{
 					const Light& light = lights[lightIdx];
@@ -529,17 +532,19 @@ void Scene::Render(int windowWidth, int windowHeight)
 					}
 					else
 					{
-						glActiveTexture(GL_TEXTURE0 + textureUnit);	
-						glBindTexture(GL_TEXTURE_2D, depthMaps[lightIdx]);
-						depthMapSamplers[num2Dmaps] = textureUnit;
-						textureUnit++;
-
 						glm::mat4 translationWithBias = glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.5f - light.shadowMappingBias));
 						glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f));
 						glm::mat4 worldToShadowMapUV = translationWithBias * scale * light.lightProjection;
 
-						std::string worldToShadowMapUniformName = "worldToShadowMapUVSpace[" + std::to_string(num2Dmaps) + "]";
+						glActiveTexture(GL_TEXTURE0 + textureUnit);	
+						glBindTexture(GL_TEXTURE_2D, depthMaps[lightIdx]);
+
+						int uniformIdx = light.type == Light::Spot ? spotLightIdx++ : Shader::maxSpotLights + dirLightIdx++;
+						std::string worldToShadowMapUniformName = "worldToShadowMapUVSpace[" + std::to_string(uniformIdx) + "]";
 						shader.SetMat4(worldToShadowMapUniformName.c_str(), glm::value_ptr(worldToShadowMapUV), 1); // TODO: set them all at once
+						depthMapSamplers[uniformIdx] = textureUnit;
+
+						textureUnit++;
 						num2Dmaps++;
 					}
 				}
@@ -570,7 +575,8 @@ void Scene::Render(int windowWidth, int windowHeight)
 					int placeholderTexture;
 					if (num2Dmaps > 0)
 					{
-						placeholderTexture = depthMapSamplers[0];
+						// set it to either the first spot light texture (if there's a spot light depth map) or the first dir light texture
+						placeholderTexture = depthMapSamplers[0] >= 0 ? depthMapSamplers[0] : depthMapSamplers[Shader::maxSpotLights];
 					}
 					else
 					{
@@ -580,9 +586,12 @@ void Scene::Render(int windowWidth, int windowHeight)
 						textureUnit++;
 					}
 
-					for (int i = num2Dmaps; i < Shader::maxSpotLights + Shader::maxDirLights; i++)
+					for (int i = 0; i < Shader::maxSpotLights + Shader::maxDirLights; i++)
 					{
-						depthMapSamplers[i] = placeholderTexture;
+						if (depthMapSamplers[i] < 0)
+						{
+							depthMapSamplers[i] = placeholderTexture;
+						}
 					}
 				}
 
@@ -920,7 +929,19 @@ void Scene::RenderUI()
 			{
 				constexpr int numLightTypes = 3;
 				const char* lightTypeStrings[numLightTypes] = { "Point", "Spot", "Directional" };
+				Light::Type oldType = light.type;
 				ImGui::Combo("Type", (int*)&light.type, lightTypeStrings, numLightTypes);
+				if (oldType != light.type)
+				{
+					// Shadow map only needs to be regenerated when we're switching from cube map to 2d map or vice versa
+					// Old texture must be deleted and regenerated before binding it to a new texture type.
+					if (oldType == Light::Point || light.type == Light::Point)
+					{
+						glDeleteTextures(1, &depthMaps[selectedEntity.lightIdx]);
+						glGenTextures(1, &depthMaps[selectedEntity.lightIdx]);
+						GenerateShadowMap(selectedEntity.lightIdx);
+					}
+				}
 				ImGui::ColorPicker3("Color", &light.color.x);
 				ImGui::InputFloat("Intensity", &light.intensity, 0.1f);
 				light.intensity = std::max(light.intensity, 0.0f);
@@ -940,8 +961,8 @@ void Scene::RenderUI()
 				if (light.type == Light::Spot || light.type == Light::Point)
 				{
 					ImGui::InputFloat("Depth Map Far", &light.depthmapFarPlane, 0.01f);
-					ImGui::InputFloat("Shadow Mapping Bias", &light.shadowMappingBias, 0.0001f);
 				}
+				ImGui::InputFloat("Shadow Mapping Bias", &light.shadowMappingBias, 0.0001f);
 			}
 		}
 
@@ -1095,5 +1116,61 @@ void Scene::ComputeSceneBoundingBox()
 			sceneBoundingBox.minXYZ = glm::min(point, sceneBoundingBox.minXYZ);
 			sceneBoundingBox.maxXYZ = glm::max(point, sceneBoundingBox.maxXYZ);
 		}
+	}
+}
+
+void Scene::GenerateShadowMap(int lightIdx)
+{
+	const Light& light = lights[lightIdx];
+	if (light.type == Light::Point)
+	{
+		GLuint fbo = depthMapFBOs[lightIdx];
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+		GLuint depthCubemapTexture = depthMaps[lightIdx];
+		glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemapTexture);
+		for (int i = 0; i < 6; i++)
+		{
+			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, shadowMapWidth, shadowMapHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+		}
+
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+
+		glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthCubemapTexture, 0);
+		glDrawBuffer(GL_NONE);
+		glReadBuffer(GL_NONE);
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+			std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	}
+	else
+	{
+		GLuint fbo = depthMapFBOs[lightIdx];
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+		GLuint depthTexture = depthMaps[lightIdx];
+		glBindTexture(GL_TEXTURE_2D, depthTexture);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadowMapWidth, shadowMapHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+
+
+		glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTexture, 0);
+		glDrawBuffer(GL_NONE);
+		glReadBuffer(GL_NONE);
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+			std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	}
 }

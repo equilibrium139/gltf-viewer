@@ -53,6 +53,7 @@
 
     // TODO: change these to array textures
     uniform samplerCubeShadow depthCubemaps[MAX_NUM_POINT_LIGHTS];
+    // Spot light depth maps assumed to start at index 0, directional light depth maps assumed at index MAX_NUM_SPOT_LIGHTS
     uniform sampler2DShadow depthMaps[MAX_NUM_SPOT_LIGHTS + MAX_NUM_DIR_LIGHTS];
     uniform mat4 viewToWorld;
 
@@ -186,15 +187,15 @@ void main()
     // TODO: currently using non-constant expression (i) to index into sampler arrays, and this is not allowed
     // in GL < 4.0: https://stackoverflow.com/questions/12030711/glsl-array-of-textures-of-differing-size/12031821#12031821
     for (int i = 0; i < numPointLights; i++) {
-        // PointLight light = pointLight[i];
-        float surfaceToLightDistance = length(pointLight[i].positionVS - fsIn.surfacePosVS);
-        if (surfaceToLightDistance > pointLight[i].range) {
+        PointLight light = pointLight[i];
+        float surfaceToLightDistance = length(light.positionVS - fsIn.surfacePosVS);
+        if (surfaceToLightDistance > light.range) {
             continue;
         }
-        vec3 surfaceToLight = normalize(pointLight[i].positionVS - fsIn.surfacePosVS);
+        vec3 surfaceToLight = normalize(light.positionVS - fsIn.surfacePosVS);
         vec3 H = normalize(surfaceToCamera + surfaceToLight);
         float attenuation = 1.0 / (surfaceToLightDistance * surfaceToLightDistance);
-        vec3 radiance = pointLight[i].color * attenuation * pointLight[i].intensity;
+        vec3 radiance = light.color * attenuation * light.intensity;
         float NDF = DistributionGGX(unitNormal, H, roughness);  
         float G = GeometrySmith(unitNormal, surfaceToCamera, surfaceToLight, roughness);
         vec3 F = fresnelSchlick(max(dot(H, surfaceToCamera), 0.0), F0);
@@ -205,17 +206,17 @@ void main()
         float denominator = 4.0 * max(dot(unitNormal, surfaceToCamera), 0.0) * max(dot(unitNormal, surfaceToLight), 0.0) + 0.0001;
         vec3 specular = numerator / denominator;
         float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
-        vec3 lightToSurfaceWS = (vec3(viewToWorld * vec4((fsIn.surfacePosVS - pointLight[i].positionVS), 0.0)));
+        vec3 lightToSurfaceWS = (vec3(viewToWorld * vec4((fsIn.surfacePosVS - light.positionVS), 0.0)));
         
         // view transformation preserves distance so this distance is the same as world space distance
-        // float lightToSurfaceDepth = surfaceToLightDistance / pointLight[i].depthCubemapFarPlane;
+        // float lightToSurfaceDepth = surfaceToLightDistance / light.depthCubemapFarPlane;
 
-        float lightToSurfaceDepth = abs(lightToSurfaceWS.z) / pointLight[i].depthCubemapFarPlane;
+        float lightToSurfaceDepth = abs(lightToSurfaceWS.z) / light.depthCubemapFarPlane;
 
-        vec4 cubeMapCoord = vec4(lightToSurfaceWS, lightToSurfaceDepth - pointLight[i].shadowMappingBias);
+        vec4 cubeMapCoord = vec4(lightToSurfaceWS, lightToSurfaceDepth - light.shadowMappingBias);
         float shadow = texture(depthCubemaps[i], cubeMapCoord);
         vec3 color = geometryTerm * radiance * shadow * (kD * baseColor.rgb / PI + specular);
-        vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;
+        vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion * light.color;
         color += ambient;
         finalColor += color;
     }
@@ -248,7 +249,7 @@ void main()
         float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
         float shadow = textureProj(depthMaps[i], fsIn.surfacePosShadowMapUVSpace[i]);
         vec3 color = geometryTerm * radiance * shadow * (kD * baseColor.rgb / PI + specular);
-        vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;
+        vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion * light.color;
         color += ambient;
         finalColor += color;
     }
@@ -271,9 +272,9 @@ void main()
         float denominator = 4.0 * max(dot(unitNormal, surfaceToCamera), 0.0) * max(dot(unitNormal, surfaceToLight), 0.0) + 0.0001;
         vec3 specular = numerator / denominator;
         float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
-        float shadow = textureProj(depthMaps[i + numSpotLights], fsIn.surfacePosShadowMapUVSpace[i + numSpotLights]);
+        float shadow = textureProj(depthMaps[i + MAX_NUM_SPOT_LIGHTS], fsIn.surfacePosShadowMapUVSpace[i + MAX_NUM_SPOT_LIGHTS]);
         vec3 color = geometryTerm * radiance * shadow * (kD * baseColor.rgb / PI + specular);
-        vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion;
+        vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion * light.color;
         color += ambient;
         finalColor += color;
     }

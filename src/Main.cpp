@@ -321,7 +321,7 @@ int main(int argc, char** argv)
     glBufferData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight) + Shader::maxSpotLights * sizeof(SpotLight) + Shader::maxDirLights * sizeof(DirectionalLight) + 3 * sizeof(int), NULL, GL_STATIC_DRAW);
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, lightsUBO);    
 
-    while (sampleModelNames[selectedModelIndex] != "ABeautifulGame")
+    while (sampleModelNames[selectedModelIndex] != "InterpolationTest")
     {
         selectedModelIndex++;
     }
