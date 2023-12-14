@@ -322,8 +322,8 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 		globalTransforms.emplace_back();
 		Entity& spotLightEntity = entities.back();
 		spotLightEntity.name = "DefaultSpotLightEntity";
-		spotLightEntity.transform.translation = glm::vec3(0.0f, 0.4f, 0.7f);
-		spotLightEntity.transform.rotation = glm::quat(glm::vec3(glm::radians(156.0f), 0.0f, 0.0f));
+		spotLightEntity.transform.translation = glm::vec3(0.0f, -3.36f, 0.7f);
+		spotLightEntity.transform.rotation = glm::quat(glm::vec3(0.0f, 0.0f, 0.0f));
 		spotLightEntity.transform.scale = glm::vec3(1.0f);
 		Light spotLight{
 			.type = Light::Spot,
@@ -416,8 +416,43 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		}
 	}
+
+	// TODO: put this somewhere else
+	std::vector<glm::vec3> circleVertices(numCircleVertices);
+	float angle = 0.0f;
+	float angleDelta = glm::radians(360.0f / numCircleVertices);
+	for (int i = 0; i < numCircleVertices; i++)
+	{
+		circleVertices[i].x = std::cos(angle);
+		circleVertices[i].y = std::sin(angle);
+		circleVertices[i].z = 0.0f;
+		angle += angleDelta;
+	}
+
+	glGenVertexArrays(1, &circleVAO);
+	glBindVertexArray(circleVAO);
+	
+	GLuint circleVBO;
+	glGenBuffers(1, &circleVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, circleVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(circleVertices[0]) * circleVertices.size(), &circleVertices.front(), GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+
+	glm::vec3 lineVertices[2] = { glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f) };
+	glGenVertexArrays(1, &lineVAO);
+	glBindVertexArray(lineVAO);
+	
+	GLuint lineVBO;
+	glGenBuffers(1, &lineVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, lineVBO);
+	glBufferData(GL_ARRAY_BUFFER, 24, &lineVertices[0], GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
 }
 
+// TODO: figure out camera aspect ratio situation and potentially get rid of these parameters
 void Scene::Render(int windowWidth, int windowHeight)
 {
 	UpdateGlobalTransforms();
@@ -890,6 +925,8 @@ void Scene::UpdateAndRender(const Input& input)
 
 	RenderUI();
 	Render(input.windowWidth, input.windowHeight);
+	glm::mat4 projView = currentCamera->GetProjectionMatrix() * currentCamera->GetViewMatrix();
+	RenderSelectedEntityVisuals(projView);
 }
 
 void Scene::RenderUI()
@@ -1094,6 +1131,110 @@ bool Scene::IsParent(int entityChild, int entityParent)
 	}
 
 	return IsParent(entities[entityChild].parent, entityParent);
+}
+
+void Scene::RenderSelectedEntityVisuals(const glm::mat4& projView)
+{
+	if (selectedEntityIdx < 0) return;
+
+	const Entity& entity = entities[selectedEntityIdx];
+	const glm::mat4& globalTransform = globalTransforms[selectedEntityIdx];
+	glm::vec3 position = globalTransform[3];
+	if (entity.lightIdx >= 0)
+	{
+		const Light& light = lights[entity.lightIdx];
+		if (light.type == Light::Point)
+		{
+			glm::mat4 mvp = projView;
+			mvp = glm::translate(mvp, position);
+			mvp = glm::scale(mvp, glm::vec3(light.range));
+			glBindVertexArray(circleVAO);
+			boundingBoxShader.use();
+			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+			glDrawArrays(GL_LINE_LOOP, 0, numCircleVertices);
+			glm::mat4 mvpXZCircle = glm::rotate(mvp, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvpXZCircle));
+			glDrawArrays(GL_LINE_LOOP, 0, numCircleVertices);
+			glm::mat4 mvpYZCircle = glm::rotate(mvp, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvpYZCircle));
+			glDrawArrays(GL_LINE_LOOP, 0, numCircleVertices);
+		}
+		else if (light.type == Light::Spot)
+		{
+			glm::vec3 forward = glm::normalize(globalTransform[2]);
+			glm::vec3 circleCenter = position + forward * light.range;
+			glm::mat4 mvp = projView;
+			mvp = glm::translate(mvp, circleCenter);
+			glm::mat4 rotation = glm::mat4(glm::normalize(globalTransform[0]), glm::normalize(globalTransform[1]), glm::normalize(globalTransform[2]), glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
+			mvp *= rotation;
+			float radius = std::tan(glm::radians(light.outerAngleCutoffDegrees)) * light.range;
+			mvp = glm::scale(mvp, glm::vec3(radius));
+			glBindVertexArray(circleVAO);
+			boundingBoxShader.use();
+			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+			glDrawArrays(GL_LINE_LOOP, 0, numCircleVertices);
+
+			float lineLength = std::sqrt(light.range * light.range + radius * radius);
+			glm::vec3 right = glm::normalize(globalTransform[0]);
+			glm::vec3 up = glm::normalize(globalTransform[1]);
+			float angle = glm::radians(45.0f);
+			glm::vec3 lineEndPoint = glm::vec3(0.0f, 0.0f, 1.0f);
+
+			glm::vec3 desiredLineEndPoint = circleCenter + radius * std::cos(angle) * right + radius * std::sin(angle) * up;
+			glm::vec3 desiredLineVector = glm::normalize(desiredLineEndPoint - position);
+			rotation = glm::mat4(1.0f);
+			rotation[2] = glm::vec4(desiredLineVector, 0.0f);
+			mvp = projView;
+			mvp = glm::translate(mvp, position);
+			mvp *= rotation;
+			mvp = glm::scale(mvp, glm::vec3(lineLength));
+			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+			glBindVertexArray(lineVAO);
+			glDrawArrays(GL_LINES, 0, 2);
+
+			angle += glm::radians(90.0f);
+			desiredLineEndPoint = circleCenter + radius * std::cos(angle) * right + radius * std::sin(angle) * up;
+			desiredLineVector = glm::normalize(desiredLineEndPoint - position);
+			rotation[2] = glm::vec4(desiredLineVector, 0.0f);
+			mvp = projView;
+			mvp = glm::translate(mvp, position);
+			mvp *= rotation;
+			mvp = glm::scale(mvp, glm::vec3(lineLength));
+			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+			glDrawArrays(GL_LINES, 0, 2);
+
+			angle += glm::radians(90.0f);
+			desiredLineEndPoint = circleCenter + radius * std::cos(angle) * right + radius * std::sin(angle) * up;
+			desiredLineVector = glm::normalize(desiredLineEndPoint - position);
+			rotation[2] = glm::vec4(desiredLineVector, 0.0f);
+			mvp = projView;
+			mvp = glm::translate(mvp, position);
+			mvp *= rotation;
+			mvp = glm::scale(mvp, glm::vec3(lineLength));
+			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+			glDrawArrays(GL_LINES, 0, 2);
+
+			angle += glm::radians(90.0f);
+			desiredLineEndPoint = circleCenter + radius * std::cos(angle) * right + radius * std::sin(angle) * up;
+			desiredLineVector = glm::normalize(desiredLineEndPoint - position);
+			rotation[2] = glm::vec4(desiredLineVector, 0.0f);
+			mvp = projView;
+			mvp = glm::translate(mvp, position);
+			mvp *= rotation;
+			mvp = glm::scale(mvp, glm::vec3(lineLength));
+			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+			glDrawArrays(GL_LINES, 0, 2);
+		}
+		else
+		{
+			assert(light.type == Light::Directional);
+		}
+	}
+
+	if (entity.cameraIdx >= 0)
+	{
+
+	}
 }
 
 void Scene::ComputeSceneBoundingBox()

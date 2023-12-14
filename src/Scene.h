@@ -35,6 +35,7 @@ private:
 	void ComputeSceneBoundingBox();
 	void GenerateShadowMap(int lightIdx);
 	bool IsParent(int entityChild, int entityParent);
+	void RenderSelectedEntityVisuals(const glm::mat4& projView);
 	std::vector<Animation> animations;
 	std::vector<Entity> entities;
 	std::vector<glm::mat4> globalTransforms;
@@ -49,7 +50,7 @@ private:
 	GLTFResources resources;
 	int selectedEntityIdx = -1;
 	GLuint boundingBoxVAO;
-	Shader boundingBoxShader = Shader("Shaders/bbox.vert", "Shaders/bbox.frag");
+	Shader boundingBoxShader = Shader("Shaders/bbox.vert", "Shaders/bbox.frag"); // TODO: rename this to something general
 	BBox sceneBoundingBox = {
 		.minXYZ = glm::vec3(FLT_MAX),
 		.maxXYZ = glm::vec3(-FLT_MAX),
@@ -60,6 +61,9 @@ private:
 	GLuint highlightTexture;
 	GLuint depthStencilRBO;
 	GLuint lightsUBO;
+	GLuint circleVAO; // TODO: find a better place for visual vertex buffers
+	const int numCircleVertices = 200;
+	GLuint lineVAO;
 	int texW, texH; // TODO: fix this nonsensical naming
 	bool firstFrame = true;
 	// TODO: make shadow map size tweakable? And in general allow for shadow options like toggling shadows
