@@ -450,6 +450,16 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 	glBufferData(GL_ARRAY_BUFFER, 24, &lineVertices[0], GL_STATIC_DRAW);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+
+	glGenVertexArrays(1, &frustumVAO);
+	glBindVertexArray(frustumVAO);
+
+	glGenBuffers(1, &frustumVBO);
+	glBindBuffer(GL_ARRAY_BUFFER, frustumVBO);
+	// 24 vertices for 12 lines, 4 on the near plane, 4 on the far plane, and 4 connecting the 2
+	glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * 24, nullptr, GL_STATIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0);
 }
 
 // TODO: figure out camera aspect ratio situation and potentially get rid of these parameters
@@ -789,7 +799,7 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 
 		glm::mat4& lightToWorld = globalTransforms[light.entityIdx];
 		glm::vec3 forward = glm::normalize(lightToWorld[2]);
-		glm::vec3 lightPositionWS = light.type != Light::Directional ? lightToWorld[3] : sceneBoundingBox.GetCenter() - 1000.0f * forward;
+		glm::vec3 lightPositionWS = light.type != Light::Directional ? lightToWorld[3] : sceneBoundingBox.GetCenter() - 7.5f * forward;
 		assert(forward != glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 worldToLight = glm::lookAt(lightPositionWS, lightPositionWS + forward, glm::vec3(0.0f, 1.0f, 0.0f));
 
@@ -805,23 +815,23 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 			float diagonal = glm::length(sceneBoundingBox.maxXYZ - sceneBoundingBox.minXYZ);
 			float frustumWidth = diagonal;
 			float frustumHeight = diagonal;
-			float farPlane = 0.0f;
-			float nearPlane = 10000.0f;
+			light.depthmapFarPlane = 0.0f;
+			light.depthmapNearPlane = 10000.0f;
 			auto sceneBBVertices = sceneBoundingBox.GetVertices();
 			for (const glm::vec3& vertex : sceneBBVertices)
 			{
 				glm::vec3 vertexLightSpace = worldToLight * glm::vec4(vertex, 1.0f);
 				float vertexDepth = -vertexLightSpace.z; // camera looks into -z so convert to positive value to use as far plane
-				if (vertexDepth > farPlane)
+				if (vertexDepth > light.depthmapFarPlane)
 				{
-					farPlane = vertexDepth;
+					light.depthmapFarPlane = vertexDepth;
 				}
-				if (vertexDepth < nearPlane)
+				if (vertexDepth < light.depthmapNearPlane)
 				{
-					nearPlane = vertexDepth;
+					light.depthmapNearPlane = vertexDepth;
 				}
 			}
-			projection = glm::ortho(-frustumWidth, frustumWidth, -frustumHeight, frustumHeight, nearPlane, farPlane);
+			projection = glm::ortho(-frustumWidth, frustumWidth, -frustumHeight, frustumHeight, light.depthmapNearPlane, light.depthmapFarPlane);
 		}
 
 		light.lightProjection = projection * worldToLight;
@@ -926,7 +936,9 @@ void Scene::UpdateAndRender(const Input& input)
 	RenderUI();
 	Render(input.windowWidth, input.windowHeight);
 	glm::mat4 projView = currentCamera->GetProjectionMatrix() * currentCamera->GetViewMatrix();
+	glDisable(GL_DEPTH_TEST);
 	RenderSelectedEntityVisuals(projView);
+	glEnable(GL_DEPTH_TEST);
 }
 
 void Scene::RenderUI()
@@ -1101,6 +1113,58 @@ void Scene::RenderBoundingBox(const BBox& bbox, const glm::mat4& mvp)
 	glDrawElements(GL_LINES, 24, GL_UNSIGNED_SHORT, 0);
 }
 
+void Scene::RenderFrustum(const glm::mat4& frustumViewProj, float near, float far, const glm::mat4& viewProj, bool perspective)
+{
+	// TODO: render shadow camera frustum. Remember: division by w inverted by division by Z (near plane depth for near plane vertices, far plane depth for far plane vertices).
+	glm::mat4 clipToWorld = glm::inverse(frustumViewProj);
+	glm::vec3 ndcCubeVertices[8] = {
+		{-1.0f, 1.0f, -1.0f}, {1.0f, 1.0f, -1.0f}, {1.0f, -1.0f, -1.0f}, {-1.0f, -1.0f, -1.0f},
+		{-1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 1.0f},  {1.0f, -1.0f, 1.0f}, {-1.0f, -1.0f, 1.0f}
+	};
+	glm::vec3 frustumVertices[8];
+	for (int i = 0; i < 8; i++)
+	{
+		frustumVertices[i] = ndcCubeVertices[i];
+		if (perspective)
+		{
+			float clipW = frustumVertices[i].z < 0.0f ? near : far;
+			frustumVertices[i] *= clipW;
+			frustumVertices[i] = clipToWorld * glm::vec4(frustumVertices[i], clipW);
+		}
+		else
+		{
+			// clip space = ndc space for orthographic projection
+			frustumVertices[i] = clipToWorld * glm::vec4(frustumVertices[i], 1.0f);
+		}
+	}
+	glm::vec3 vbVertices[24];
+	// Near plane lines
+	vbVertices[0] = frustumVertices[0]; vbVertices[1] = frustumVertices[1];
+	vbVertices[2] = frustumVertices[1]; vbVertices[3] = frustumVertices[2];
+	vbVertices[4] = frustumVertices[2]; vbVertices[5] = frustumVertices[3];
+	vbVertices[6] = frustumVertices[3]; vbVertices[7] = frustumVertices[0];
+
+	// Far plane lines
+	vbVertices[8] = frustumVertices[4]; vbVertices[9] = frustumVertices[5];
+	vbVertices[10] = frustumVertices[5]; vbVertices[11] = frustumVertices[6];
+	vbVertices[12] = frustumVertices[6]; vbVertices[13] = frustumVertices[7];
+	vbVertices[14] = frustumVertices[7]; vbVertices[15] = frustumVertices[4];
+
+	// Lines connecting far and near
+	vbVertices[16] = frustumVertices[0]; vbVertices[17] = frustumVertices[4];
+	vbVertices[18] = frustumVertices[1]; vbVertices[19] = frustumVertices[5];
+	vbVertices[20] = frustumVertices[2]; vbVertices[21] = frustumVertices[6];
+	vbVertices[22] = frustumVertices[3]; vbVertices[23] = frustumVertices[7];
+
+	glBindVertexArray(frustumVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, frustumVBO);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(glm::vec3) * 24, vbVertices);
+	glm::mat4 mvp = viewProj;
+	boundingBoxShader.use();
+	boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+	glDrawArrays(GL_LINES, 0, 24);
+}
+
 void Scene::UpdateGlobalTransforms()
 {
 	for (int i = 0; i < entities.size(); i++)
@@ -1133,7 +1197,7 @@ bool Scene::IsParent(int entityChild, int entityParent)
 	return IsParent(entities[entityChild].parent, entityParent);
 }
 
-void Scene::RenderSelectedEntityVisuals(const glm::mat4& projView)
+void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 {
 	if (selectedEntityIdx < 0) return;
 
@@ -1145,7 +1209,7 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& projView)
 		const Light& light = lights[entity.lightIdx];
 		if (light.type == Light::Point)
 		{
-			glm::mat4 mvp = projView;
+			glm::mat4 mvp = viewProj;
 			mvp = glm::translate(mvp, position);
 			mvp = glm::scale(mvp, glm::vec3(light.range));
 			glBindVertexArray(circleVAO);
@@ -1163,7 +1227,7 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& projView)
 		{
 			glm::vec3 forward = glm::normalize(globalTransform[2]);
 			glm::vec3 circleCenter = position + forward * light.range;
-			glm::mat4 mvp = projView;
+			glm::mat4 mvp = viewProj;
 			mvp = glm::translate(mvp, circleCenter);
 			glm::mat4 rotation = glm::mat4(glm::normalize(globalTransform[0]), glm::normalize(globalTransform[1]), glm::normalize(globalTransform[2]), glm::vec4(0.0f, 0.0f, 0.0f, 1.0f));
 			mvp *= rotation;
@@ -1184,7 +1248,7 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& projView)
 			glm::vec3 desiredLineVector = glm::normalize(desiredLineEndPoint - position);
 			rotation = glm::mat4(1.0f);
 			rotation[2] = glm::vec4(desiredLineVector, 0.0f);
-			mvp = projView;
+			mvp = viewProj;
 			mvp = glm::translate(mvp, position);
 			mvp *= rotation;
 			mvp = glm::scale(mvp, glm::vec3(lineLength));
@@ -1196,7 +1260,7 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& projView)
 			desiredLineEndPoint = circleCenter + radius * std::cos(angle) * right + radius * std::sin(angle) * up;
 			desiredLineVector = glm::normalize(desiredLineEndPoint - position);
 			rotation[2] = glm::vec4(desiredLineVector, 0.0f);
-			mvp = projView;
+			mvp = viewProj;
 			mvp = glm::translate(mvp, position);
 			mvp *= rotation;
 			mvp = glm::scale(mvp, glm::vec3(lineLength));
@@ -1207,7 +1271,7 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& projView)
 			desiredLineEndPoint = circleCenter + radius * std::cos(angle) * right + radius * std::sin(angle) * up;
 			desiredLineVector = glm::normalize(desiredLineEndPoint - position);
 			rotation[2] = glm::vec4(desiredLineVector, 0.0f);
-			mvp = projView;
+			mvp = viewProj;
 			mvp = glm::translate(mvp, position);
 			mvp *= rotation;
 			mvp = glm::scale(mvp, glm::vec3(lineLength));
@@ -1218,16 +1282,19 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& projView)
 			desiredLineEndPoint = circleCenter + radius * std::cos(angle) * right + radius * std::sin(angle) * up;
 			desiredLineVector = glm::normalize(desiredLineEndPoint - position);
 			rotation[2] = glm::vec4(desiredLineVector, 0.0f);
-			mvp = projView;
+			mvp = viewProj;
 			mvp = glm::translate(mvp, position);
 			mvp *= rotation;
 			mvp = glm::scale(mvp, glm::vec3(lineLength));
 			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
 			glDrawArrays(GL_LINES, 0, 2);
+
+			RenderFrustum(light.lightProjection, light.depthmapNearPlane, light.depthmapFarPlane, viewProj);
 		}
 		else
 		{
 			assert(light.type == Light::Directional);
+			RenderFrustum(light.lightProjection, light.depthmapNearPlane, light.depthmapFarPlane, viewProj, false);
 		}
 	}
 

@@ -30,12 +30,13 @@ private:
 	void RenderUI();
 	void RenderHierarchyUI(int entityIdx);
 	void RenderBoundingBox(const BBox& bbox, const glm::mat4& mvp);
+	void RenderFrustum(const glm::mat4& frustumViewProj, float near, float far, const glm::mat4& viewProj, bool perspective = true);
 	void UpdateGlobalTransforms();
 	void UpdateGlobalTransforms(int entityIdx, const glm::mat4& parentTransform);
 	void ComputeSceneBoundingBox();
 	void GenerateShadowMap(int lightIdx);
 	bool IsParent(int entityChild, int entityParent);
-	void RenderSelectedEntityVisuals(const glm::mat4& projView);
+	void RenderSelectedEntityVisuals(const glm::mat4& viewProj);
 	std::vector<Animation> animations;
 	std::vector<Entity> entities;
 	std::vector<glm::mat4> globalTransforms;
@@ -64,6 +65,8 @@ private:
 	GLuint circleVAO; // TODO: find a better place for visual vertex buffers
 	const int numCircleVertices = 200;
 	GLuint lineVAO;
+	GLuint frustumVAO;
+	GLuint frustumVBO;
 	int texW, texH; // TODO: fix this nonsensical naming
 	bool firstFrame = true;
 	// TODO: make shadow map size tweakable? And in general allow for shadow options like toggling shadows
