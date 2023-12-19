@@ -300,7 +300,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 	{
 		// TODO: sync entites and global transforms array in a cleaner way
 		int entityIdx = entities.size();
-		entities.emplace_back();
+		/*entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& pointLightEntity = entities.back();
 		pointLightEntity.name = "DefaultPointLightEntity";
@@ -315,9 +315,9 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(pointLight);
-		pointLightEntity.lightIdx = 0;
+		pointLightEntity.lightIdx = 0;*/
 
-		entityIdx++;
+		/*entityIdx++;
 		entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& spotLightEntity = entities.back();
@@ -335,9 +335,9 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(spotLight);
-		spotLightEntity.lightIdx = 1;
+		spotLightEntity.lightIdx = 1;*/
 
-		entityIdx++;
+		//entityIdx++;
 		entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& dirLightEntity = entities.back();
@@ -353,7 +353,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(dirLight);
-		dirLightEntity.lightIdx = 2;
+		dirLightEntity.lightIdx = 0;
 	}
 
 	depthMapFBOs.resize(lights.size());
@@ -812,11 +812,10 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 		else
 		{
 			// TODO: heuristic, fix later
-			float diagonal = glm::length(sceneBoundingBox.maxXYZ - sceneBoundingBox.minXYZ);
-			float frustumWidth = diagonal;
-			float frustumHeight = diagonal;
 			light.depthmapFarPlane = 0.0f;
 			light.depthmapNearPlane = 10000.0f;
+			float maxXDist = 0.0f;
+			float maxYDist = 0.0f;
 			auto sceneBBVertices = sceneBoundingBox.GetVertices();
 			for (const glm::vec3& vertex : sceneBBVertices)
 			{
@@ -830,7 +829,25 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 				{
 					light.depthmapNearPlane = vertexDepth;
 				}
+
+				float vertexXDist = std::abs(vertexLightSpace.x);
+				if (vertexXDist > maxXDist)
+				{
+					maxXDist = vertexXDist;
+				}
+
+				float vertexYDist = std::abs(vertexLightSpace.y);
+				if (vertexYDist > maxYDist)
+				{
+					maxYDist = vertexYDist;
+				}
 			}
+			// Make sure the frustum includes everything within the bounding box
+			const float epsilon = 0.1f;
+			float frustumWidth = maxXDist + epsilon;
+			float frustumHeight = maxYDist + epsilon;
+			light.depthmapNearPlane += epsilon;
+			light.depthmapFarPlane += epsilon;
 			projection = glm::ortho(-frustumWidth, frustumWidth, -frustumHeight, frustumHeight, light.depthmapNearPlane, light.depthmapFarPlane);
 		}
 
@@ -1300,7 +1317,9 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 
 	if (entity.cameraIdx >= 0)
 	{
-
+		const Camera& camera = cameras[entity.cameraIdx];
+		glm::mat4 cameraViewProj = camera.GetProjectionMatrix() * camera.GetViewMatrix();
+		RenderFrustum(cameraViewProj, camera.near, camera.far, viewProj);
 	}
 }
 
