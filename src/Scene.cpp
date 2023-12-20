@@ -799,7 +799,7 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 
 		glm::mat4& lightToWorld = globalTransforms[light.entityIdx];
 		glm::vec3 forward = glm::normalize(lightToWorld[2]);
-		glm::vec3 lightPositionWS = light.type != Light::Directional ? lightToWorld[3] : sceneBoundingBox.GetCenter() - 7.5f * forward;
+		glm::vec3 lightPositionWS = lightToWorld[3];
 		assert(forward != glm::vec3(0.0f, 1.0f, 0.0f));
 		glm::mat4 worldToLight = glm::lookAt(lightPositionWS, lightPositionWS + forward, glm::vec3(0.0f, 1.0f, 0.0f));
 
@@ -817,31 +817,40 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 			float maxXDist = 0.0f;
 			float maxYDist = 0.0f;
 			auto sceneBBVertices = sceneBoundingBox.GetVertices();
-			for (const glm::vec3& vertex : sceneBBVertices)
+			float distFromCenter = 10.0f;
+			do
 			{
-				glm::vec3 vertexLightSpace = worldToLight * glm::vec4(vertex, 1.0f);
-				float vertexDepth = -vertexLightSpace.z; // camera looks into -z so convert to positive value to use as far plane
-				if (vertexDepth > light.depthmapFarPlane)
+				lightPositionWS = sceneBoundingBox.GetCenter() - distFromCenter * forward;
+				worldToLight = glm::lookAt(lightPositionWS, lightPositionWS + forward, glm::vec3(0.0f, 1.0f, 0.0f));
+				for (const glm::vec3& vertex : sceneBBVertices)
 				{
-					light.depthmapFarPlane = vertexDepth;
-				}
-				if (vertexDepth < light.depthmapNearPlane)
-				{
-					light.depthmapNearPlane = vertexDepth;
-				}
+					glm::vec3 vertexLightSpace = worldToLight * glm::vec4(vertex, 1.0f);
+					float vertexDepth = -vertexLightSpace.z; // camera looks into -z so convert to positive value to use as far plane
+					if (vertexDepth > light.depthmapFarPlane)
+					{
+						light.depthmapFarPlane = vertexDepth;
+					}
+					if (vertexDepth < light.depthmapNearPlane)
+					{
+						light.depthmapNearPlane = vertexDepth;
+					}
 
-				float vertexXDist = std::abs(vertexLightSpace.x);
-				if (vertexXDist > maxXDist)
-				{
-					maxXDist = vertexXDist;
-				}
+					float vertexXDist = std::abs(vertexLightSpace.x);
+					if (vertexXDist > maxXDist)
+					{
+						maxXDist = vertexXDist;
+					}
 
-				float vertexYDist = std::abs(vertexLightSpace.y);
-				if (vertexYDist > maxYDist)
-				{
-					maxYDist = vertexYDist;
+					float vertexYDist = std::abs(vertexLightSpace.y);
+					if (vertexYDist > maxYDist)
+					{
+						maxYDist = vertexYDist;
+					}
 				}
-			}
+				distFromCenter += 10.0f;
+			} while (light.depthmapNearPlane <= 0.0f);
+
+			
 			// Make sure the frustum includes everything within the bounding box
 			const float epsilon = 0.1f;
 			float frustumWidth = maxXDist + epsilon;
