@@ -239,13 +239,16 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 		{
 			camera.name = "Camera " + std::to_string(defaultCameraNameSuffix++);
 		}
-		// TODO: handle gltf camera aspect ratio
 		if (perspective)
 		{
 			camera.zoom = glm::degrees(gltfCamera.perspective.yfov);
 			camera.near = gltfCamera.perspective.znear;
 			camera.far = gltfCamera.perspective.zfar;
-			camera.aspectRatio = gltfCamera.perspective.aspectRatio;
+			if (gltfCamera.perspective.aspectRatio > 0.0f)
+			{
+				camera.aspectRatio = gltfCamera.perspective.aspectRatio;
+			}
+			// TODO: for now using default aspect ratio which happens to match viewport aspect ratio
 		}
 	}
 	
@@ -708,25 +711,12 @@ void Scene::Render(int windowWidth, int windowHeight)
 				glDrawArrays(GL_TRIANGLES, 0, submesh.countVerticesOrIndices);
 			}
 		}
-
-		if (entity.cameraIdx >= 0)
-		{
-			// We don't need to mess with yaw/pitch. Those are only used for changing camera via keyboard/mouse input. 
-			// Entity cameras are not controllable by input; they only change when their entity's transform changes.
-			Camera& camera = cameras[entity.cameraIdx];
-			glm::vec4 globalTransformXAxisNormalized = glm::normalize(globalTransform[0]);
-			glm::vec4 globalTransformYAxisNormalized = glm::normalize(globalTransform[1]);
-			glm::vec4 globalTransformZAxisNormalized = glm::normalize(globalTransform[2]);
-			camera.right = globalTransformXAxisNormalized;
-			camera.up = globalTransformYAxisNormalized;
-			camera.front = -globalTransformZAxisNormalized;
-			camera.position = glm::vec3(globalTransform[3]);
-		}
 	}
 
 	//RenderBoundingBox(sceneBoundingBox, projection * view);
 
 	// Position controllable camera according to scene bounding box
+	// TODO: find better place for this
 	if (firstFrame)
 	{
 		firstFrame = false;
@@ -1210,6 +1200,19 @@ void Scene::UpdateGlobalTransforms(int entityIdx, const glm::mat4& parentTransfo
 	glm::mat4& globalTransform = globalTransforms[entityIdx];
 	const Entity& entity = entities[entityIdx];
 	globalTransform = parentTransform * entity.transform.GetMatrix();
+	if (entity.cameraIdx >= 0)
+	{
+		// We don't need to mess with yaw/pitch. Those are only used for changing camera via keyboard/mouse input. 
+		// Entity cameras are not controllable by input; they only change when their entity's transform changes.
+		Camera& camera = cameras[entity.cameraIdx];
+		glm::vec4 x = glm::normalize(globalTransform[0]);
+		glm::vec4 y = glm::normalize(globalTransform[1]);
+		glm::vec4 z = glm::normalize(globalTransform[2]);
+		camera.right = x;
+		camera.up = y;
+		camera.front = -z;
+		camera.position = glm::vec3(globalTransform[3]);
+	}
 	for (int child : entity.children)
 	{
 		UpdateGlobalTransforms(child, globalTransform);
