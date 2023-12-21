@@ -812,16 +812,18 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 		else
 		{
 			// TODO: heuristic, fix later
-			light.depthmapFarPlane = 0.0f;
-			light.depthmapNearPlane = 10000.0f;
-			float maxXDist = 0.0f;
-			float maxYDist = 0.0f;
 			auto sceneBBVertices = sceneBoundingBox.GetVertices();
 			float distFromCenter = 10.0f;
+			float maxXDist = 0.0f;
+			float maxYDist = 0.0f;
 			do
 			{
 				lightPositionWS = sceneBoundingBox.GetCenter() - distFromCenter * forward;
 				worldToLight = glm::lookAt(lightPositionWS, lightPositionWS + forward, glm::vec3(0.0f, 1.0f, 0.0f));
+				light.depthmapFarPlane = 0.0f;
+				light.depthmapNearPlane = 10000.0f;
+				maxXDist = 0.0f;
+				maxYDist = 0.0f;
 				for (const glm::vec3& vertex : sceneBBVertices)
 				{
 					glm::vec3 vertexLightSpace = worldToLight * glm::vec4(vertex, 1.0f);
@@ -857,6 +859,7 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 			float frustumHeight = maxYDist + epsilon;
 			light.depthmapNearPlane += epsilon;
 			light.depthmapFarPlane += epsilon;
+			//light.shadowMappingBias = (light.depthmapFarPlane - light.depthmapNearPlane) * 0.01f;
 			projection = glm::ortho(-frustumWidth, frustumWidth, -frustumHeight, frustumHeight, light.depthmapNearPlane, light.depthmapFarPlane);
 		}
 
