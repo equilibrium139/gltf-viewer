@@ -1322,11 +1322,33 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 			glDrawArrays(GL_LINES, 0, 2);
 
 			RenderFrustum(light.lightProjection, light.depthmapNearPlane, light.depthmapFarPlane, viewProj);
+
+			glViewport(0, 0, shadowMapVisualizerDims, shadowMapVisualizerDims);
+			glBindVertexArray(fullscreenQuadVAO);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, depthMaps[entity.lightIdx]);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE); // Treat as normal texture 
+			perspectiveDepthMapShader.use();
+			perspectiveDepthMapShader.SetInt("depthMap", 0);
+			perspectiveDepthMapShader.SetFloat("nearPlane", light.depthmapNearPlane);
+			perspectiveDepthMapShader.SetFloat("farPlane", light.depthmapFarPlane);
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE); // Treat as shadow texture
 		}
 		else
 		{
 			assert(light.type == Light::Directional);
 			RenderFrustum(light.lightProjection, light.depthmapNearPlane, light.depthmapFarPlane, viewProj, false);
+
+			glViewport(0, 0, shadowMapVisualizerDims, shadowMapVisualizerDims);
+			glBindVertexArray(fullscreenQuadVAO);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, depthMaps[entity.lightIdx]);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE); // Treat as normal texture 
+			orthographicDepthMapShader.use();
+			orthographicDepthMapShader.SetInt("depthMap", 0);
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE); // Treat as shadow texture
 		}
 	}
 
