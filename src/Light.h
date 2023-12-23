@@ -27,6 +27,7 @@ struct Light {
 	float shadowMappingBias = 0.001f;
 	glm::mat4 lightProjection;
 	int entityIdx; // must be >= 0
+	int debugShadowMapRenderFace = 0; // for rendering shadow map visualizer for point light depth cube map
 };
 
 // GPU lights (for use in shaders). Padding added to match std140 layout

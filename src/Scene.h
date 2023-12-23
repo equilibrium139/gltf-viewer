@@ -53,6 +53,7 @@ private:
 	GLuint boundingBoxVAO;
 	Shader boundingBoxShader = Shader("Shaders/bbox.vert", "Shaders/bbox.frag"); // TODO: rename this to something general
 	Shader perspectiveDepthMapShader = Shader("Shaders/fullscreen.vert", "Shaders/perspectiveDepthMapVisualizer.frag");
+	Shader perspectiveDepthCubeMapShader = Shader("Shaders/fullscreen.vert", "Shaders/perspectiveDepthCubeMapVisualizer.frag");
 	Shader orthographicDepthMapShader = Shader("Shaders/fullscreen.vert", "Shaders/orthographicDepthMapVisualizer.frag");
 	BBox sceneBoundingBox = {
 		.minXYZ = glm::vec3(FLT_MAX),

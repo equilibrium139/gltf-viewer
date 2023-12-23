@@ -847,7 +847,6 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 			const float epsilon = 0.1f;
 			float frustumWidth = maxXDist + epsilon;
 			float frustumHeight = maxYDist + epsilon;
-			light.depthmapNearPlane += epsilon;
 			light.depthmapFarPlane += epsilon;
 			//light.shadowMappingBias = (light.depthmapFarPlane - light.depthmapNearPlane) * 0.01f;
 			projection = glm::ortho(-frustumWidth, frustumWidth, -frustumHeight, frustumHeight, light.depthmapNearPlane, light.depthmapFarPlane);
@@ -1031,6 +1030,11 @@ void Scene::RenderUI()
 					ImGui::InputFloat("Depth Map Far", &light.depthmapFarPlane, 0.01f);
 				}
 				ImGui::InputFloat("Shadow Mapping Bias", &light.shadowMappingBias, 0.0001f);
+
+				if (light.type == Light::Point)
+				{
+					ImGui::DragInt("Shadow map render face", &light.debugShadowMapRenderFace, 0.2f, 0, 5);
+				}
 			}
 		}
 
@@ -1254,6 +1258,19 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 			glm::mat4 mvpYZCircle = glm::rotate(mvp, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvpYZCircle));
 			glDrawArrays(GL_LINE_LOOP, 0, numCircleVertices);
+
+			glViewport(0, 0, shadowMapVisualizerDims, shadowMapVisualizerDims);
+			glBindVertexArray(fullscreenQuadVAO);
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_CUBE_MAP, depthMaps[entity.lightIdx]);
+			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_NONE); // Treat as normal texture 
+			perspectiveDepthCubeMapShader.use();
+			perspectiveDepthCubeMapShader.SetInt("depthMap", 0);
+			perspectiveDepthCubeMapShader.SetFloat("nearPlane", light.depthmapNearPlane);
+			perspectiveDepthCubeMapShader.SetFloat("farPlane", light.depthmapFarPlane);
+			perspectiveDepthCubeMapShader.SetInt("face", light.debugShadowMapRenderFace);
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE); // Treat as shadow texture
 		}
 		else if (light.type == Light::Spot)
 		{
