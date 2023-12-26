@@ -811,7 +811,7 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 				lightPositionWS = sceneBoundingBox.GetCenter() - distFromCenter * forward;
 				worldToLight = glm::lookAt(lightPositionWS, lightPositionWS + forward, glm::vec3(0.0f, 1.0f, 0.0f));
 				light.depthmapFarPlane = 0.0f;
-				light.depthmapNearPlane = 10000.0f;
+				light.depthmapNearPlane = FLT_MAX;
 				maxXDist = 0.0f;
 				maxYDist = 0.0f;
 				for (const glm::vec3& vertex : sceneBBVertices)
@@ -1388,15 +1388,39 @@ void Scene::ComputeSceneBoundingBox()
 		}
 		const glm::mat4& globalTransform = globalTransforms[i];
 		const Mesh& entityMesh = resources.meshes[entity.meshIdx];
-		auto bboxWorldPoints = entityMesh.boundingBox.GetVertices();
+		auto bboxWorldVertices = entityMesh.boundingBox.GetVertices();
 
-		for (glm::vec3& point : bboxWorldPoints)
+		for (glm::vec3& point : bboxWorldVertices)
 		{
 			// TODO: this is probably fine for static meshes but animated ones might have larger bounding boxes, so maybe fix that
 			point = globalTransform * glm::vec4(point, 1.0f);
 			sceneBoundingBox.minXYZ = glm::min(point, sceneBoundingBox.minXYZ);
 			sceneBoundingBox.maxXYZ = glm::max(point, sceneBoundingBox.maxXYZ);
 		}
+	}
+
+	//glm::mat4 view = currentCamera->GetViewMatrix();
+	if (sceneBoundingBox.Contains(currentCamera->position))
+	{
+		currentCamera->near = NEAR;
+	}
+	else
+	{
+		float nearestDepth = FLT_MAX;
+		const glm::mat4 view = currentCamera->GetViewMatrix();
+		auto bboxWorldVertices = sceneBoundingBox.GetVertices();
+		for (const glm::vec3& point : bboxWorldVertices)
+		{
+			// TODO: this is probably fine for static meshes but animated ones might have larger bounding boxes, so maybe fix that
+			glm::vec3 viewSpaceVertex = view * glm::vec4(point, 1.0f);
+			float vertexDepth = viewSpaceVertex.z;
+			if (vertexDepth < 0.0f && -vertexDepth < nearestDepth)
+			{
+				nearestDepth = -vertexDepth;
+			}
+		}
+		currentCamera->near = nearestDepth;
+		std::cout << currentCamera->near << '\n';
 	}
 }
 

@@ -17,4 +17,10 @@ struct BBox
 	{
 		return minXYZ + (maxXYZ - minXYZ) * 0.5f;
 	}
+	bool Contains(const glm::vec3& point) const
+	{
+		return point.x >= minXYZ.x && point.x <= maxXYZ.x &&
+			   point.y >= minXYZ.y && point.y <= maxXYZ.y &&
+			   point.z >= minXYZ.z && point.z <= maxXYZ.z;
+	}
 };
