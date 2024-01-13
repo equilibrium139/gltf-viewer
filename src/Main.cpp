@@ -3,6 +3,7 @@
 #include "imgui_impl_opengl3.h"
 #include "Input.h"
 #include <memory>
+#include "tiny_gltf/stb_image.h"
 #include "tiny_gltf/tiny_gltf.h"
 #include <unordered_map>
 #include <filesystem>
@@ -114,7 +115,9 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
     GLuint colorTexture,
     GLuint highlightTexture,
     GLuint depthStencilRBO,
-    GLuint lightsUBO)
+    GLuint lightsUBO,
+    GLuint skyboxVAO,
+    GLuint environmentMap)
 {
     std::string filepath = "C:\\dev\\gltf-models\\" + modelName + "\\glTF\\" + modelName + ".gltf";
     tinygltf::Model model;
@@ -139,7 +142,7 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
     }
 
     assert(model.scenes.size() == 1); // cba
-    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model, windowWidth, windowHeight, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO));
+    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model, windowWidth, windowHeight, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap));
     return &pair.first->second;
 }
 
@@ -178,6 +181,8 @@ int main(int argc, char** argv)
     glfwSetKeyCallback(window, key_callback);
 
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
 
     std::unordered_map<std::string, Scene> sampleModels;
     std::vector<std::string> sampleModelNames;
@@ -321,11 +326,176 @@ int main(int argc, char** argv)
     glBufferData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight) + Shader::maxSpotLights * sizeof(SpotLight) + Shader::maxDirLights * sizeof(DirectionalLight) + 3 * sizeof(int), NULL, GL_STATIC_DRAW);
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, lightsUBO);    
 
+    int width, height, nrComponents;
+    stbi_set_flip_vertically_on_load(true);
+    float* data = stbi_loadf("EnvironmentMaps/burnt_warehouse.hdr", &width, &height, &nrComponents, 0);
+    GLuint hdrTexture;
+    if (data)
+    {
+        glGenTextures(1, &hdrTexture);
+        glBindTexture(GL_TEXTURE_2D, hdrTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, data);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+    }
+    else
+    {
+        std::cout << "Failed to load HDR image." << std::endl;
+    }
+    stbi_set_flip_vertically_on_load(false);
+
+    glm::vec3 cubeVertices[] = {
+        {-1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, -1.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, -1.0f}, {-1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, 1.0f},  // POSITIVE_X
+
+        {-1.0f, -1.0f, 0.0f}, {-1.0f, 1.0f, -1.0f}, {1.0f, -1.0f, 0.0f}, {-1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.0f}, {-1.0f, -1.0f, 1.0f}, {-1.0f, 1.0f, 0.0f}, {-1.0f, -1.0f, -1.0f},    // NEGATIVE_X
+
+        {-1.0f, -1.0f, 0.0f}, {-1.0f, 1.0f, -1.0f}, {1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, -1.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {-1.0f, 1.0f, 0.0f}, {-1.0f, 1.0f, 1.0f},   // POSITIVE_Y // TODO: fix the rest (match uv with pos)
+
+        {-1.0f, -1.0f, 0.0f}, {-1.0f, -1.0f, 1.0f}, {1.0f, -1.0f, 0.0f}, {1.0f, -1.0f, 1.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, -1.0f}, {-1.0f, 1.0f, 0.0f}, {-1.0f, -1.0f, -1.0f}, // NEGATIVE_Y
+
+         {-1.0f, -1.0f, 0.0f}, {-1.0f, 1.0f, 1.0f}, {1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, 1.0f}, {-1.0f, 1.0f, 0.0f}, {-1.0f, -1.0f, 1.0f},   // POSITIVE_Z
+
+        {-1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, -1.0f}, {1.0f, -1.0f, 0.0f}, {-1.0f, 1.0f, -1.0f}, {1.0f, 1.0f, 0.0f}, {-1.0f, -1.0f, -1.0f}, {-1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, -1.0f}, // NEGATIVE_Z
+    };
+
+    GLuint cubeIndices[] = {
+        0, 1, 2, 2, 3, 0, 
+        4, 5, 6, 6, 7, 4,
+        8, 9, 10, 10, 11, 8,
+        12, 13, 14, 14, 15, 12,
+        16, 17, 18, 18, 19, 16,
+        20, 21, 22, 22, 23, 20
+    };
+
+    GLuint cubeVAO;
+    glGenVertexArrays(1, &cubeVAO);
+    glBindVertexArray(cubeVAO);
+    
+    GLuint cubeVBO;
+    glGenBuffers(1, &cubeVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
+    
+    GLuint cubeIBO;
+    glGenBuffers(1, &cubeIBO);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubeIBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(cubeIndices), cubeIndices, GL_STATIC_DRAW);
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(glm::vec3), 0);
+
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(glm::vec3), (const void*)(sizeof(glm::vec3)));
+
+    GLuint environmentMap;
+    glGenTextures(1, &environmentMap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        // note that we store each face with 16 bit floating point values
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F,
+            512, 512, 0, GL_RGB, GL_FLOAT, nullptr);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    GLuint captureFBO, captureRBO;
+    glGenFramebuffers(1, &captureFBO);
+    glGenRenderbuffers(1, &captureRBO);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, captureRBO);
+
+    Shader equirectToCubemapShader = Shader("Shaders/equirectToCubemap.vert", "Shaders/equirectToCubemap.frag");
+    equirectToCubemapShader.use();
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, hdrTexture);
+    equirectToCubemapShader.SetInt("equirectangularMap", 0);
+
+    glViewport(0, 0, 512, 512);
+    //glDisable(GL_CULL_FACE);
+    //glDepthFunc(GL_LEQUAL);
+
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, environmentMap, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (const void*)(i * 6 * sizeof(GLuint)));
+    }
+
+    glEnable(GL_CULL_FACE);
+    glDepthFunc(GL_LESS);
+
+    float skyboxVertices[] = {
+        // positions          
+        -1.0f,  1.0f, -1.0f,
+        -1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f, -1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+
+        -1.0f, -1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f,
+        -1.0f, -1.0f,  1.0f,
+
+        -1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f, -1.0f,
+         1.0f,  1.0f,  1.0f,
+         1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f,  1.0f,
+        -1.0f,  1.0f, -1.0f,
+
+        -1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f, -1.0f,
+         1.0f, -1.0f, -1.0f,
+        -1.0f, -1.0f,  1.0f,
+         1.0f, -1.0f,  1.0f
+    };
+
+    unsigned int skyboxVAO, skyboxVBO;
+    glGenVertexArrays(1, &skyboxVAO);
+    glGenBuffers(1, &skyboxVBO);
+    glBindVertexArray(skyboxVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+
     while (sampleModelNames[selectedModelIndex] != "InterpolationTest")
     {
         selectedModelIndex++;
     }
-    Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO);
+    Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap);
 
     Shader postprocessShader = Shader("Shaders/fullscreen.vert", "Shaders/postprocess.frag");
 
@@ -391,7 +561,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO);
+            selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap);
         }
 
         if (selectedScene)

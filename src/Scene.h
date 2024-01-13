@@ -19,7 +19,9 @@ public:
 		GLuint colorTexture,
 		GLuint highlightTexture,
 		GLuint depthStencilRBO,
-		GLuint lightsUBO);
+		GLuint lightsUBO,
+		GLuint skyboxVAO,
+		GLuint environmentMap);
 	void UpdateAndRender(const Input& input);
 	float time = 0.0f; // TODO: remove
 	float exposure = 1.0f;
@@ -37,6 +39,8 @@ private:
 	void GenerateShadowMap(int lightIdx);
 	bool IsParent(int entityChild, int entityParent);
 	void RenderSelectedEntityVisuals(const glm::mat4& viewProj);
+	void ConfigureCamera(const BBox& bbox);
+	void RenderSkybox(const glm::mat4& view, const glm::mat4& proj);
 	std::vector<Animation> animations;
 	std::vector<Entity> entities;
 	std::vector<glm::mat4> globalTransforms;
@@ -55,6 +59,7 @@ private:
 	Shader perspectiveDepthMapShader = Shader("Shaders/fullscreen.vert", "Shaders/perspectiveDepthMapVisualizer.frag");
 	Shader perspectiveDepthCubeMapShader = Shader("Shaders/fullscreen.vert", "Shaders/perspectiveDepthCubeMapVisualizer.frag");
 	Shader orthographicDepthMapShader = Shader("Shaders/fullscreen.vert", "Shaders/orthographicDepthMapVisualizer.frag");
+	Shader skyboxShader = Shader("Shaders/skybox.vert", "Shaders/skybox.frag");
 	BBox sceneBoundingBox = {
 		.minXYZ = glm::vec3(FLT_MAX),
 		.maxXYZ = glm::vec3(-FLT_MAX),
@@ -72,6 +77,8 @@ private:
 	GLuint frustumVBO;
 	int texW, texH; // TODO: fix this nonsensical naming
 	bool firstFrame = true;
+	GLuint skyboxVAO;
+	GLuint environmentMap;
 	// TODO: make shadow map size tweakable? And in general allow for shadow options like toggling shadows
 	static constexpr int shadowMapWidth = 2048;
 	static constexpr int shadowMapHeight = 2048;

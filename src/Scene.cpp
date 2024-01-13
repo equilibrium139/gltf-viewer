@@ -12,8 +12,10 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 	GLuint colorTexture,
 	GLuint highlightTexture,
 	GLuint depthStencilRBO,
-	GLuint lightsUBO)
-	:resources(model), fbo(fbo), fullscreenQuadVAO(fullscreenQuadVAO), colorTexture(colorTexture), highlightTexture(highlightTexture), depthStencilRBO(depthStencilRBO), texW(windowWidth), texH(windowHeight), lightsUBO(lightsUBO)
+	GLuint lightsUBO,
+	GLuint skyboxVAO,
+	GLuint environmentMap)
+	:resources(model), fbo(fbo), fullscreenQuadVAO(fullscreenQuadVAO), colorTexture(colorTexture), highlightTexture(highlightTexture), depthStencilRBO(depthStencilRBO), texW(windowWidth), texH(windowHeight), lightsUBO(lightsUBO), skyboxVAO(skyboxVAO), environmentMap(environmentMap)
 {
 	assert(model.scenes.size() == 1); // for now
 
@@ -303,7 +305,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 	{
 		// TODO: sync entites and global transforms array in a cleaner way
 		int entityIdx = entities.size();
-		/*entities.emplace_back();
+		entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& pointLightEntity = entities.back();
 		pointLightEntity.name = "DefaultPointLightEntity";
@@ -318,9 +320,9 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(pointLight);
-		pointLightEntity.lightIdx = 0;*/
+		pointLightEntity.lightIdx = 0;
 
-		/*entityIdx++;
+		entityIdx++;
 		entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& spotLightEntity = entities.back();
@@ -338,9 +340,9 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(spotLight);
-		spotLightEntity.lightIdx = 1;*/
+		spotLightEntity.lightIdx = 1;
 
-		//entityIdx++;
+		entityIdx++;
 		entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& dirLightEntity = entities.back();
@@ -356,7 +358,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(dirLight);
-		dirLightEntity.lightIdx = 0;
+		dirLightEntity.lightIdx = 2;
 	}
 
 	depthMapFBOs.resize(lights.size());
@@ -409,7 +411,6 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
 
 			glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTexture, 0);
 			glDrawBuffer(GL_NONE);
@@ -468,8 +469,6 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 // TODO: figure out camera aspect ratio situation and potentially get rid of these parameters
 void Scene::Render(int windowWidth, int windowHeight)
 {
-	UpdateGlobalTransforms();
-	ComputeSceneBoundingBox(); 
 	const auto view = currentCamera->GetViewMatrix();
 	const auto viewToWorld = glm::inverse(view);
 	RenderShadowMaps(view);
@@ -714,68 +713,6 @@ void Scene::Render(int windowWidth, int windowHeight)
 	}
 
 	//RenderBoundingBox(sceneBoundingBox, projection * view);
-
-	// Position controllable camera according to scene bounding box
-	// TODO: find better place for this
-	if (firstFrame)
-	{
-		firstFrame = false;
-		glm::vec3 dims = sceneBoundingBox.maxXYZ - sceneBoundingBox.minXYZ;
-		glm::vec3 center = sceneBoundingBox.GetCenter();
-		glm::vec3 offsetFromCenter(0.0f);
-		float maxDim = std::max({ dims.x, dims.y, dims.z });
-		if (dims.x < dims.y)
-		{
-			if (dims.x < dims.z)
-			{
-				offsetFromCenter.x = maxDim;
-			}
-			else
-			{
-				offsetFromCenter.z = maxDim;
-			}
-		}
-		else
-		{
-			if (dims.y < dims.z)
-			{
-				offsetFromCenter.y = maxDim;
-			}
-			else
-			{
-				offsetFromCenter.z = maxDim;
-			}
-		}
-		controllableCamera.position = center + offsetFromCenter;
-		controllableCamera.LookAt(center);
-		auto bboxPoints = sceneBoundingBox.GetVertices();
-		while (true)
-		{
-			glm::mat4 mvp = controllableCamera.GetProjectionMatrix() * controllableCamera.GetViewMatrix();
-			bool allPointsInCamView = true;
-			for (const glm::vec3& point : bboxPoints)
-			{
-				glm::vec4 clipSpacePoint = mvp * glm::vec4(point, 1.0f);
-				glm::vec3 ndcPoint(clipSpacePoint.x / clipSpacePoint.w, clipSpacePoint.y / clipSpacePoint.w, clipSpacePoint.z / clipSpacePoint.w);
-				if (ndcPoint.x < -1.0f || ndcPoint.x > 1.0f ||
-					ndcPoint.y < -1.0f || ndcPoint.y > 1.0f)
-				{
-					allPointsInCamView = false;
-					break;
-				}
-			}
-			if (allPointsInCamView)
-			{
-				break;
-			}
-			else
-			{
-				offsetFromCenter *= 1.5f;
-				controllableCamera.position = center + offsetFromCenter;
-			}
-		}
-		controllableCamera.movementSpeed = maxDim / 5.0f;
-	}
 }
 
 void Scene::RenderShadowMaps(const glm::mat4& view)
@@ -952,8 +889,18 @@ void Scene::UpdateAndRender(const Input& input)
 	}
 
 	RenderUI();
+	UpdateGlobalTransforms();
+	ComputeSceneBoundingBox();
+	if (firstFrame)
+	{
+		firstFrame = false;
+		ConfigureCamera(sceneBoundingBox);
+	}
 	Render(input.windowWidth, input.windowHeight);
-	glm::mat4 projView = currentCamera->GetProjectionMatrix() * currentCamera->GetViewMatrix();
+	const glm::mat4 proj = currentCamera->GetProjectionMatrix();
+	const glm::mat4 view = currentCamera->GetViewMatrix();
+	const glm::mat4 projView = proj * view;
+	RenderSkybox(view, proj);
 	glDisable(GL_DEPTH_TEST);
 	RenderSelectedEntityVisuals(projView);
 	glEnable(GL_DEPTH_TEST);
@@ -1119,6 +1066,11 @@ void Scene::RenderHierarchyUI(int entityIdx)
 		{
 			selectedEntityIdx = entityIdx;
 		}
+	}
+
+	if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+	{
+		std::cout << entities[selectedEntityIdx].name;
 	}
 }
 
@@ -1377,8 +1329,86 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 	}
 }
 
+void Scene::ConfigureCamera(const BBox& bbox)
+{
+	glm::vec3 dims = bbox.maxXYZ - bbox.minXYZ;
+	glm::vec3 center = bbox.GetCenter();
+	glm::vec3 offsetFromCenter(0.0f);
+	float maxDim = std::max({ dims.x, dims.y, dims.z });
+	if (dims.x < dims.y)
+	{
+		if (dims.x < dims.z)
+		{
+			offsetFromCenter.x = maxDim;
+		}
+		else
+		{
+			offsetFromCenter.z = maxDim;
+		}
+	}
+	else
+	{
+		if (dims.y < dims.z)
+		{
+			offsetFromCenter.y = maxDim;
+		}
+		else
+		{
+			offsetFromCenter.z = maxDim;
+		}
+	}
+	controllableCamera.position = center + offsetFromCenter;
+	controllableCamera.LookAt(center);
+	auto bboxPoints = bbox.GetVertices();
+	while (true)
+	{
+		glm::mat4 mvp = controllableCamera.GetProjectionMatrix() * controllableCamera.GetViewMatrix();
+		bool allPointsInCamView = true;
+		for (const glm::vec3& point : bboxPoints)
+		{
+			glm::vec4 clipSpacePoint = mvp * glm::vec4(point, 1.0f);
+			glm::vec3 ndcPoint(clipSpacePoint.x / clipSpacePoint.w, clipSpacePoint.y / clipSpacePoint.w, clipSpacePoint.z / clipSpacePoint.w);
+			if (ndcPoint.x < -1.0f || ndcPoint.x > 1.0f ||
+				ndcPoint.y < -1.0f || ndcPoint.y > 1.0f)
+			{
+				allPointsInCamView = false;
+				break;
+			}
+		}
+		if (allPointsInCamView)
+		{
+			break;
+		}
+		else
+		{
+			offsetFromCenter *= 1.5f;
+			controllableCamera.position = center + offsetFromCenter;
+		}
+	}
+	controllableCamera.movementSpeed = maxDim / 5.0f;
+}
+
+void Scene::RenderSkybox(const glm::mat4& view, const glm::mat4& proj)
+{
+	glDepthFunc(GL_LEQUAL);
+	glDisable(GL_CULL_FACE);
+	glBindVertexArray(skyboxVAO);
+	skyboxShader.use();
+	const glm::mat4 rotView = glm::mat4(glm::mat3(view));
+	skyboxShader.SetMat4("projection", glm::value_ptr(proj));
+	skyboxShader.SetMat4("rotView", glm::value_ptr(rotView));
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap);
+	skyboxShader.SetInt("environmentMap", 0);
+	glDrawArrays(GL_TRIANGLES, 0, 36);
+	glDepthFunc(GL_LESS);
+	glEnable(GL_CULL_FACE);
+}
+
 void Scene::ComputeSceneBoundingBox()
 {
+	// TODO: reset bounding box, otherwise bounding box size never decreases even if scene bb actually does
+
 	for (int i = 0; i < entities.size(); i++)
 	{
 		const Entity& entity = entities[i];
@@ -1420,7 +1450,6 @@ void Scene::ComputeSceneBoundingBox()
 			}
 		}
 		currentCamera->near = nearestDepth;
-		std::cout << currentCamera->near << '\n';
 	}
 }
 
