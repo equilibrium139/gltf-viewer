@@ -14,8 +14,9 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 	GLuint depthStencilRBO,
 	GLuint lightsUBO,
 	GLuint skyboxVAO,
-	GLuint environmentMap)
-	:resources(model), fbo(fbo), fullscreenQuadVAO(fullscreenQuadVAO), colorTexture(colorTexture), highlightTexture(highlightTexture), depthStencilRBO(depthStencilRBO), texW(windowWidth), texH(windowHeight), lightsUBO(lightsUBO), skyboxVAO(skyboxVAO), environmentMap(environmentMap)
+	GLuint environmentMap,
+	GLuint irradianceMap)
+	:resources(model), fbo(fbo), fullscreenQuadVAO(fullscreenQuadVAO), colorTexture(colorTexture), highlightTexture(highlightTexture), depthStencilRBO(depthStencilRBO), texW(windowWidth), texH(windowHeight), lightsUBO(lightsUBO), skyboxVAO(skyboxVAO), environmentMap(environmentMap), irradianceMap(irradianceMap)
 {
 	assert(model.scenes.size() == 1); // for now
 
@@ -558,6 +559,11 @@ void Scene::Render(int windowWidth, int windowHeight)
 					glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(modelView)));
 					shader.SetMat3("normalMatrixVS", glm::value_ptr(normalMatrix));
 				}
+
+				glActiveTexture(GL_TEXTURE0 + textureUnit);
+				glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap);
+				shader.SetInt("irradianceMap", textureUnit);
+				textureUnit++;
 
 				int numCubemaps = 0;
 				int num2Dmaps = 0;

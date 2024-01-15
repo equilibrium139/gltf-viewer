@@ -21,7 +21,9 @@ public:
 		GLuint depthStencilRBO,
 		GLuint lightsUBO,
 		GLuint skyboxVAO,
-		GLuint environmentMap);
+		GLuint environmentMap,
+		GLuint irradianceMap
+		);
 	void UpdateAndRender(const Input& input);
 	float time = 0.0f; // TODO: remove
 	float exposure = 1.0f;
@@ -79,6 +81,7 @@ private:
 	bool firstFrame = true;
 	GLuint skyboxVAO;
 	GLuint environmentMap;
+	GLuint irradianceMap;
 	// TODO: make shadow map size tweakable? And in general allow for shadow options like toggling shadows
 	static constexpr int shadowMapWidth = 2048;
 	static constexpr int shadowMapHeight = 2048;

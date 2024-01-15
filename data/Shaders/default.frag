@@ -51,6 +51,8 @@
         int numDirLights;
     };
 
+    uniform samplerCube irradianceMap;
+
     // TODO: change these to array textures
     uniform samplerCubeShadow depthCubemaps[MAX_NUM_POINT_LIGHTS];
     // Spot light depth maps assumed to start at index 0, directional light depth maps assumed at index MAX_NUM_SPOT_LIGHTS
@@ -109,7 +111,13 @@
 
     vec3 fresnelSchlick(float cosTheta, vec3 F0)
     {
+        // https://www.desmos.com/calculator/s4vkjimp63
         return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+    }  
+
+    vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
+    {
+        return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
     }  
 
 #endif // HAS_NORMALS || FLAT_SHADING
@@ -216,8 +224,6 @@ void main()
         vec4 cubeMapCoord = vec4(lightToSurfaceWS, lightToSurfaceDepth - light.shadowMappingBias);
         float shadow = texture(depthCubemaps[i], cubeMapCoord);
         vec3 color = geometryTerm * radiance * shadow * (kD * baseColor.rgb / PI + specular);
-        vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion * light.color;
-        color += ambient;
         finalColor += color;
     }
 
@@ -249,8 +255,6 @@ void main()
         float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
         float shadow = textureProj(depthMaps[i], fsIn.surfacePosShadowMapUVSpace[i]);
         vec3 color = geometryTerm * radiance * shadow * (kD * baseColor.rgb / PI + specular);
-        vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion * light.color;
-        color += ambient;
         finalColor += color;
     }
 
@@ -274,10 +278,18 @@ void main()
         float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
         float shadow = textureProj(depthMaps[i + MAX_NUM_SPOT_LIGHTS], fsIn.surfacePosShadowMapUVSpace[i + MAX_NUM_SPOT_LIGHTS]);
         vec3 color = geometryTerm * radiance * shadow * (kD * baseColor.rgb / PI + specular);
-        vec3 ambient = vec3(0.03) * baseColor.rgb * occlusion * light.color;
-        color += ambient;
         finalColor += color;
     }
+
+    // ambient lighting using irradiance map
+    vec3 kS = fresnelSchlickRoughness(max(dot(unitNormal, surfaceToCamera), 0.0), F0, roughness);
+    vec3 kD = 1.0 - kS;
+    kD *= 1.0 - metallic;
+    vec3 irradiance = texture(irradianceMap, unitNormal).rgb;
+    vec3 diffuse = irradiance * baseColor.rgb;
+    vec3 ambient = kD * diffuse * occlusion;
+
+    finalColor += ambient;
 
     fragColor = vec4(finalColor, baseColor.a);
     // fragColor = vec4(finalColor, 1.0);
