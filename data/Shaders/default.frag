@@ -52,6 +52,8 @@
     };
 
     uniform samplerCube irradianceMap;
+    uniform samplerCube prefilterMap;
+    uniform sampler2D brdfLUT;  
 
     // TODO: change these to array textures
     uniform samplerCubeShadow depthCubemaps[MAX_NUM_POINT_LIGHTS];
@@ -109,13 +111,13 @@
         return ggx1 * ggx2;
     }
 
-    vec3 fresnelSchlick(float cosTheta, vec3 F0)
+    vec3 FresnelSchlick(float cosTheta, vec3 F0)
     {
         // https://www.desmos.com/calculator/s4vkjimp63
         return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
     }  
 
-    vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
+    vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness)
     {
         return F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
     }  
@@ -206,7 +208,7 @@ void main()
         vec3 radiance = light.color * attenuation * light.intensity;
         float NDF = DistributionGGX(unitNormal, H, roughness);  
         float G = GeometrySmith(unitNormal, surfaceToCamera, surfaceToLight, roughness);
-        vec3 F = fresnelSchlick(max(dot(H, surfaceToCamera), 0.0), F0);
+        vec3 F = FresnelSchlick(max(dot(H, surfaceToCamera), 0.0), F0);
         vec3 kS = F;
         vec3 kD = vec3(1.0) - kS;
         kD *= 1.0 - metallic;
@@ -245,7 +247,7 @@ void main()
         vec3 radiance = light.color * distanceAttenuation * angularAttenuation * light.intensity;
         float NDF = DistributionGGX(unitNormal, H, roughness);  
         float G = GeometrySmith(unitNormal, surfaceToCamera, surfaceToLight, roughness);
-        vec3 F = fresnelSchlick(max(dot(H, surfaceToCamera), 0.0), F0);
+        vec3 F = FresnelSchlick(max(dot(H, surfaceToCamera), 0.0), F0);
         vec3 kS = F;
         vec3 kD = vec3(1.0) - kS;
         kD *= 1.0 - metallic;
@@ -268,7 +270,7 @@ void main()
         vec3 radiance = light.color * light.intensity;
         float NDF = DistributionGGX(unitNormal, H, roughness);  
         float G = GeometrySmith(unitNormal, surfaceToCamera, surfaceToLight, roughness);
-        vec3 F = fresnelSchlick(max(dot(H, surfaceToCamera), 0.0), F0);
+        vec3 F = FresnelSchlick(max(dot(H, surfaceToCamera), 0.0), F0);
         vec3 kS = F;
         vec3 kD = vec3(1.0) - kS;
         kD *= 1.0 - metallic;
@@ -282,12 +284,23 @@ void main()
     }
 
     // ambient lighting using irradiance map
-    vec3 kS = fresnelSchlickRoughness(max(dot(unitNormal, surfaceToCamera), 0.0), F0, roughness);
+    vec3 F = FresnelSchlickRoughness(max(dot(unitNormal, surfaceToCamera), 0.0), F0, roughness);
+    vec3 kS = F;
     vec3 kD = 1.0 - kS;
     kD *= 1.0 - metallic;
-    vec3 irradiance = texture(irradianceMap, unitNormal).rgb;
+    vec3 normalWS = vec3(viewToWorld * vec4(unitNormal, 0.0));
+    vec3 irradiance = texture(irradianceMap, normalWS).rgb;
     vec3 diffuse = irradiance * baseColor.rgb;
-    vec3 ambient = kD * diffuse * occlusion;
+
+    vec3 R = reflect(-surfaceToCamera, unitNormal);   
+    vec3 reflectionWS = vec3(viewToWorld * vec4(R, 0.0)); // convert to world space so we can properly sample 
+    const float MAX_REFLECTION_LOD = 4.0;
+    vec3 prefilteredColor = textureLod(prefilterMap, reflectionWS,  roughness * MAX_REFLECTION_LOD).rgb;    
+
+    vec2 envBRDF = texture(brdfLUT, vec2(max(dot(unitNormal, surfaceToCamera), 0.0), roughness)).rg;
+    vec3 indirectSpecular = prefilteredColor * (F * envBRDF.x + envBRDF.y);
+
+    vec3 ambient = (kD * diffuse + indirectSpecular) * occlusion;
 
     finalColor += ambient;
 

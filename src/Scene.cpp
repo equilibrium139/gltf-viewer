@@ -15,8 +15,11 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 	GLuint lightsUBO,
 	GLuint skyboxVAO,
 	GLuint environmentMap,
-	GLuint irradianceMap)
-	:resources(model), fbo(fbo), fullscreenQuadVAO(fullscreenQuadVAO), colorTexture(colorTexture), highlightTexture(highlightTexture), depthStencilRBO(depthStencilRBO), texW(windowWidth), texH(windowHeight), lightsUBO(lightsUBO), skyboxVAO(skyboxVAO), environmentMap(environmentMap), irradianceMap(irradianceMap)
+	GLuint irradianceMap, 
+	GLuint prefilterMap,
+	GLuint brdfLUT)
+	:resources(model), fbo(fbo), fullscreenQuadVAO(fullscreenQuadVAO), colorTexture(colorTexture), highlightTexture(highlightTexture), depthStencilRBO(depthStencilRBO), texW(windowWidth), texH(windowHeight), lightsUBO(lightsUBO), skyboxVAO(skyboxVAO), environmentMap(environmentMap), irradianceMap(irradianceMap), prefilterMap(prefilterMap),
+	 brdfLUT(brdfLUT)
 {
 	assert(model.scenes.size() == 1); // for now
 
@@ -563,6 +566,16 @@ void Scene::Render(int windowWidth, int windowHeight)
 				glActiveTexture(GL_TEXTURE0 + textureUnit);
 				glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap);
 				shader.SetInt("irradianceMap", textureUnit);
+				textureUnit++;
+
+				glActiveTexture(GL_TEXTURE0 + textureUnit);
+				glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap);
+				shader.SetInt("prefilterMap", textureUnit);
+				textureUnit++;
+
+				glActiveTexture(GL_TEXTURE0 + textureUnit);
+				glBindTexture(GL_TEXTURE_2D, brdfLUT);
+				shader.SetInt("brdfLUT", textureUnit);
 				textureUnit++;
 
 				int numCubemaps = 0;
@@ -1435,28 +1448,30 @@ void Scene::ComputeSceneBoundingBox()
 		}
 	}
 
-	//glm::mat4 view = currentCamera->GetViewMatrix();
-	if (sceneBoundingBox.Contains(currentCamera->position))
-	{
+	glm::mat4 view = currentCamera->GetViewMatrix();
+	// TODO: properly compute near plane
+	/*if (sceneBoundingBox.Contains(currentCamera->position))
+	{*/
 		currentCamera->near = NEAR;
-	}
-	else
-	{
-		float nearestDepth = FLT_MAX;
-		const glm::mat4 view = currentCamera->GetViewMatrix();
-		auto bboxWorldVertices = sceneBoundingBox.GetVertices();
-		for (const glm::vec3& point : bboxWorldVertices)
-		{
-			// TODO: this is probably fine for static meshes but animated ones might have larger bounding boxes, so maybe fix that
-			glm::vec3 viewSpaceVertex = view * glm::vec4(point, 1.0f);
-			float vertexDepth = viewSpaceVertex.z;
-			if (vertexDepth < 0.0f && -vertexDepth < nearestDepth)
-			{
-				nearestDepth = -vertexDepth;
-			}
-		}
-		currentCamera->near = nearestDepth;
-	}
+	//}
+	//else
+	//{
+	//	float nearestDepth = FLT_MAX;
+	//	
+	//	const glm::mat4 view = currentCamera->GetViewMatrix();
+	//	auto bboxWorldVertices = sceneBoundingBox.GetVertices();
+	//	for (const glm::vec3& point : bboxWorldVertices)
+	//	{
+	//		// TODO: this is probably fine for static meshes but animated ones might have larger bounding boxes, so maybe fix that
+	//		glm::vec3 viewSpaceVertex = view * glm::vec4(point, 1.0f);
+	//		float vertexDepth = viewSpaceVertex.z;
+	//		if (vertexDepth < 0.0f && -vertexDepth < nearestDepth)
+	//		{
+	//			nearestDepth = -vertexDepth;
+	//		}
+	//	}
+	//	currentCamera->near = nearestDepth;
+	//}
 }
 
 void Scene::GenerateShadowMap(int lightIdx)

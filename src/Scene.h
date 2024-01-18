@@ -22,7 +22,9 @@ public:
 		GLuint lightsUBO,
 		GLuint skyboxVAO,
 		GLuint environmentMap,
-		GLuint irradianceMap
+		GLuint irradianceMap,
+		GLuint prefilterMap,
+		GLuint brdfLUT
 		);
 	void UpdateAndRender(const Input& input);
 	float time = 0.0f; // TODO: remove
@@ -82,6 +84,8 @@ private:
 	GLuint skyboxVAO;
 	GLuint environmentMap;
 	GLuint irradianceMap;
+	GLuint prefilterMap;
+	GLuint brdfLUT;
 	// TODO: make shadow map size tweakable? And in general allow for shadow options like toggling shadows
 	static constexpr int shadowMapWidth = 2048;
 	static constexpr int shadowMapHeight = 2048;
