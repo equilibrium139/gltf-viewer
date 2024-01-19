@@ -175,7 +175,7 @@ void main()
 
     #ifdef HAS_TEXCOORD
         vec4 baseColor = texture(material.baseColorTexture, fsIn.texCoords) * material.baseColorFactor;
-        vec2 metallicRoughness = texture(material.metallicRoughnessTexture, fsIn.texCoords).gb * vec2(material.metallicFactor, material.roughnessFactor);
+        vec2 metallicRoughness = texture(material.metallicRoughnessTexture, fsIn.texCoords).bg * vec2(material.metallicFactor, material.roughnessFactor);
         float occlusion = texture(material.occlusionTexture, fsIn.texCoords).r * material.occlusionStrength;
     #else
         vec4 baseColor = material.baseColorFactor;

@@ -309,7 +309,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 	{
 		// TODO: sync entites and global transforms array in a cleaner way
 		int entityIdx = entities.size();
-		entities.emplace_back();
+		/*entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& pointLightEntity = entities.back();
 		pointLightEntity.name = "DefaultPointLightEntity";
@@ -324,9 +324,9 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(pointLight);
-		pointLightEntity.lightIdx = 0;
+		pointLightEntity.lightIdx = 0;*/
 
-		entityIdx++;
+		/*entityIdx++;
 		entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& spotLightEntity = entities.back();
@@ -344,31 +344,34 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 			.entityIdx = entityIdx
 		};
 		lights.push_back(spotLight);
-		spotLightEntity.lightIdx = 1;
+		spotLightEntity.lightIdx = 1;*/
 
-		entityIdx++;
-		entities.emplace_back();
-		globalTransforms.emplace_back();
-		Entity& dirLightEntity = entities.back();
-		dirLightEntity.name = "DefaultDirectionalLightEntity";
-		dirLightEntity.transform.translation = glm::vec3(0.0f, 0.3f, 0.0f); // TODO: replace magic numbers
-		dirLightEntity.transform.rotation = glm::quat(glm::vec3(glm::radians(126.0f), 0.0f, 0.0f));
-		dirLightEntity.transform.scale = glm::vec3(1.0f); // TODO: make light independent of scale
-		Light dirLight{
-			.type = Light::Directional,
-			.color = glm::vec3(1.0f, 0.0f, 0.0f),
-			.intensity = 100.0f,
-			.depthmapFarPlane = 10.0f,
-			.entityIdx = entityIdx
-		};
-		lights.push_back(dirLight);
-		dirLightEntity.lightIdx = 2;
+		//entityIdx++;
+		//entities.emplace_back();
+		//globalTransforms.emplace_back();
+		//Entity& dirLightEntity = entities.back();
+		//dirLightEntity.name = "DefaultDirectionalLightEntity";
+		//dirLightEntity.transform.translation = glm::vec3(0.0f, 0.3f, 0.0f); // TODO: replace magic numbers
+		//dirLightEntity.transform.rotation = glm::quat(glm::vec3(glm::radians(126.0f), 0.0f, 0.0f));
+		//dirLightEntity.transform.scale = glm::vec3(1.0f); // TODO: make light independent of scale
+		//Light dirLight{
+		//	.type = Light::Directional,
+		//	.color = glm::vec3(0.7f, 0.7f, 0.7f),
+		//	.intensity = 100.0f,
+		//	.depthmapFarPlane = 10.0f,
+		//	.entityIdx = entityIdx
+		//};
+		//lights.push_back(dirLight);
+		//dirLightEntity.lightIdx = 0;
 	}
 
 	depthMapFBOs.resize(lights.size());
 	depthMaps.resize(lights.size());
-	glGenFramebuffers(lights.size(), &depthMapFBOs.front());
-	glGenTextures(lights.size(), &depthMaps.front());
+	if (lights.size() > 0)
+	{
+		glGenFramebuffers(lights.size(), &depthMapFBOs.front());
+		glGenTextures(lights.size(), &depthMaps.front());
+	}
 
 	for (int i = 0; i < lights.size(); i++)
 	{
