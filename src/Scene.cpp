@@ -309,7 +309,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 	{
 		// TODO: sync entites and global transforms array in a cleaner way
 		int entityIdx = entities.size();
-		/*entities.emplace_back();
+		entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& pointLightEntity = entities.back();
 		pointLightEntity.name = "DefaultPointLightEntity";
@@ -317,16 +317,16 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 		pointLightEntity.transform.scale = glm::vec3(1.0f);
 		Light pointLight{
 			.type = Light::Point, 
-			.color = glm::vec3(1.0f, 0.0f, 0.0f), 
-			.intensity = 3.0f,
+			.color = glm::vec3(0.7f, 0.7f, 0.7f),
+			.intensity = 0.0f,
 			.range = 3.0f,
 			.depthmapFarPlane = 5.0f,
 			.entityIdx = entityIdx
 		};
 		lights.push_back(pointLight);
-		pointLightEntity.lightIdx = 0;*/
+		pointLightEntity.lightIdx = 0;
 
-		/*entityIdx++;
+		entityIdx++;
 		entities.emplace_back();
 		globalTransforms.emplace_back();
 		Entity& spotLightEntity = entities.back();
@@ -337,32 +337,32 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 		Light spotLight{
 			.type = Light::Spot,
 			.color = glm::vec3(0.7f, 0.7f, 0.7f),
-			.intensity = 50.0f,
+			.intensity = 0.0f,
 			.range = 25.0f,
 			.innerAngleCutoffDegrees = 1.0f,
 			.outerAngleCutoffDegrees = 2.0f,
 			.entityIdx = entityIdx
 		};
 		lights.push_back(spotLight);
-		spotLightEntity.lightIdx = 1;*/
+		spotLightEntity.lightIdx = 1;
 
-		//entityIdx++;
-		//entities.emplace_back();
-		//globalTransforms.emplace_back();
-		//Entity& dirLightEntity = entities.back();
-		//dirLightEntity.name = "DefaultDirectionalLightEntity";
-		//dirLightEntity.transform.translation = glm::vec3(0.0f, 0.3f, 0.0f); // TODO: replace magic numbers
-		//dirLightEntity.transform.rotation = glm::quat(glm::vec3(glm::radians(126.0f), 0.0f, 0.0f));
-		//dirLightEntity.transform.scale = glm::vec3(1.0f); // TODO: make light independent of scale
-		//Light dirLight{
-		//	.type = Light::Directional,
-		//	.color = glm::vec3(0.7f, 0.7f, 0.7f),
-		//	.intensity = 100.0f,
-		//	.depthmapFarPlane = 10.0f,
-		//	.entityIdx = entityIdx
-		//};
-		//lights.push_back(dirLight);
-		//dirLightEntity.lightIdx = 0;
+		entityIdx++;
+		entities.emplace_back();
+		globalTransforms.emplace_back();
+		Entity& dirLightEntity = entities.back();
+		dirLightEntity.name = "DefaultDirectionalLightEntity";
+		dirLightEntity.transform.translation = glm::vec3(0.0f, 0.3f, 0.0f); // TODO: replace magic numbers
+		dirLightEntity.transform.rotation = glm::quat(glm::vec3(glm::radians(126.0f), 0.0f, 0.0f));
+		dirLightEntity.transform.scale = glm::vec3(1.0f); // TODO: make light independent of scale
+		Light dirLight{
+			.type = Light::Directional,
+			.color = glm::vec3(0.7f, 0.7f, 0.7f),
+			.intensity = 0.0f,
+			.depthmapFarPlane = 10.0f,
+			.entityIdx = entityIdx
+		};
+		lights.push_back(dirLight);
+		dirLightEntity.lightIdx = 2;
 	}
 
 	depthMapFBOs.resize(lights.size());
@@ -1157,8 +1157,9 @@ void Scene::RenderFrustum(const glm::mat4& frustumViewProj, float near, float fa
 	glBindBuffer(GL_ARRAY_BUFFER, frustumVBO);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(glm::vec3) * 24, vbVertices);
 	glm::mat4 mvp = viewProj;
-	boundingBoxShader.use();
-	boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+	visualShader.use();
+	visualShader.SetMat4("mvp", glm::value_ptr(mvp));
+	visualShader.SetVec3("color", glm::vec3(0.0f, 1.0f, 0.0f));
 	glDrawArrays(GL_LINES, 0, 24);
 }
 
@@ -1223,21 +1224,57 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 			mvp = glm::translate(mvp, position);
 			mvp = glm::scale(mvp, glm::vec3(light.range));
 			glBindVertexArray(circleVAO);
-			boundingBoxShader.use();
-			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+			visualShader.use();
+			visualShader.SetMat4("mvp", glm::value_ptr(mvp));
+			visualShader.SetVec3("color", glm::vec3(1.0f, 0.0f, 0.0f));
 			glDrawArrays(GL_LINE_LOOP, 0, numCircleVertices);
 			glm::mat4 mvpXZCircle = glm::rotate(mvp, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvpXZCircle));
+			visualShader.SetMat4("mvp", glm::value_ptr(mvpXZCircle));
 			glDrawArrays(GL_LINE_LOOP, 0, numCircleVertices);
 			glm::mat4 mvpYZCircle = glm::rotate(mvp, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvpYZCircle));
+			visualShader.SetMat4("mvp", glm::value_ptr(mvpYZCircle));
 			glDrawArrays(GL_LINE_LOOP, 0, numCircleVertices);
+
+			// render frustum of current debug render face
+			glm::mat4 projection = glm::perspective(glm::radians(90.0f), (float)shadowMapWidth / (float)shadowMapHeight, light.depthmapNearPlane, light.depthmapFarPlane);
+			glm::mat4 view;
+			if (light.debugShadowMapRenderFace == 0) // +x
+			{
+				view = glm::lookAt(position, position + glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+			}
+			else if (light.debugShadowMapRenderFace == 1) // -x
+			{
+				view = glm::lookAt(position, position + glm::vec3(-1.0f, 0.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+
+			}
+			else if (light.debugShadowMapRenderFace == 2) // +y
+			{
+				view = glm::lookAt(position, position + glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+			}
+			else if (light.debugShadowMapRenderFace == 3) // -y
+			{
+				view = glm::lookAt(position, position + glm::vec3(0.0f, -1.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+
+			}
+			else if (light.debugShadowMapRenderFace == 4) // +z
+			{
+
+				view = glm::lookAt(position, position + glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+			}
+			else // -z
+			{
+				view = glm::lookAt(position, position + glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+			}
+			glm::mat4 lightProjection = projection * view;
+			RenderFrustum(lightProjection, light.depthmapNearPlane, light.depthmapFarPlane, viewProj);
+
 
 			glViewport(0, 0, shadowMapVisualizerDims, shadowMapVisualizerDims);
 			glBindVertexArray(fullscreenQuadVAO);
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_CUBE_MAP, depthMaps[entity.lightIdx]);
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_NONE); // Treat as normal texture 
+			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_NONE); // Treat as normal texture so we can visualize it
 			perspectiveDepthCubeMapShader.use();
 			perspectiveDepthCubeMapShader.SetInt("depthMap", 0);
 			perspectiveDepthCubeMapShader.SetFloat("nearPlane", light.depthmapNearPlane);
@@ -1257,8 +1294,9 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 			float radius = std::tan(glm::radians(light.outerAngleCutoffDegrees)) * light.range;
 			mvp = glm::scale(mvp, glm::vec3(radius));
 			glBindVertexArray(circleVAO);
-			boundingBoxShader.use();
-			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+			visualShader.use();
+			visualShader.SetMat4("mvp", glm::value_ptr(mvp));
+			visualShader.SetVec3("color", glm::vec3(1.0f, 0.0f, 0.0f));
 			glDrawArrays(GL_LINE_LOOP, 0, numCircleVertices);
 
 			float lineLength = std::sqrt(light.range * light.range + radius * radius);
@@ -1275,7 +1313,7 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 			mvp = glm::translate(mvp, position);
 			mvp *= rotation;
 			mvp = glm::scale(mvp, glm::vec3(lineLength));
-			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+			visualShader.SetMat4("mvp", glm::value_ptr(mvp));
 			glBindVertexArray(lineVAO);
 			glDrawArrays(GL_LINES, 0, 2);
 
@@ -1287,7 +1325,7 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 			mvp = glm::translate(mvp, position);
 			mvp *= rotation;
 			mvp = glm::scale(mvp, glm::vec3(lineLength));
-			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+			visualShader.SetMat4("mvp", glm::value_ptr(mvp));
 			glDrawArrays(GL_LINES, 0, 2);
 
 			angle += glm::radians(90.0f);
@@ -1298,7 +1336,7 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 			mvp = glm::translate(mvp, position);
 			mvp *= rotation;
 			mvp = glm::scale(mvp, glm::vec3(lineLength));
-			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+			visualShader.SetMat4("mvp", glm::value_ptr(mvp));
 			glDrawArrays(GL_LINES, 0, 2);
 
 			angle += glm::radians(90.0f);
@@ -1309,7 +1347,7 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 			mvp = glm::translate(mvp, position);
 			mvp *= rotation;
 			mvp = glm::scale(mvp, glm::vec3(lineLength));
-			boundingBoxShader.SetMat4("mvp", glm::value_ptr(mvp));
+			visualShader.SetMat4("mvp", glm::value_ptr(mvp));
 			glDrawArrays(GL_LINES, 0, 2);
 
 			RenderFrustum(light.lightProjection, light.depthmapNearPlane, light.depthmapFarPlane, viewProj);

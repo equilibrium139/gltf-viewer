@@ -64,6 +64,7 @@ private:
 	Shader perspectiveDepthCubeMapShader = Shader("Shaders/fullscreen.vert", "Shaders/perspectiveDepthCubeMapVisualizer.frag");
 	Shader orthographicDepthMapShader = Shader("Shaders/fullscreen.vert", "Shaders/orthographicDepthMapVisualizer.frag");
 	Shader skyboxShader = Shader("Shaders/skybox.vert", "Shaders/skybox.frag");
+	Shader visualShader = Shader("Shaders/visual.vert", "Shaders/visual.frag");
 	BBox sceneBoundingBox = {
 		.minXYZ = glm::vec3(FLT_MAX),
 		.maxXYZ = glm::vec3(-FLT_MAX),
