@@ -111,6 +111,8 @@ void ProcessInput(GLFWwindow* window, Input& outInput, const ImGuiIO& io)
 }
 
 Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, Scene>& scenes, GLuint fbo,
+    GLuint fbW,
+    GLuint fbH,
     GLuint fullscreenQuadVAO,
     GLuint colorTexture,
     GLuint highlightTexture,
@@ -145,7 +147,7 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
     }
 
     assert(model.scenes.size() == 1); // cba
-    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model, windowWidth, windowHeight, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap, irradianceMap, prefilterMap, brdfLUT));
+    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model, fbW, fbH, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap, irradianceMap, prefilterMap, brdfLUT));
     return &pair.first->second;
 }
 
@@ -292,13 +294,14 @@ int main(int argc, char** argv)
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glViewport(0, 0, windowWidth, windowHeight);
 
-    int texW = windowWidth;
-    int texH = windowHeight;
+    // All scenes always render to framebuffer with fbW * fbH resolution. Scene renderer doesn't worry about scene resizing (for now)
+    const int fbW = windowWidth;
+    const int fbH = windowHeight;
 
     GLuint colorTexture;
     glGenTextures(1, &colorTexture);
     glBindTexture(GL_TEXTURE_2D, colorTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, texW, texH, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, fbW, fbH, 0, GL_RGBA, GL_FLOAT, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorTexture, 0);
@@ -306,13 +309,13 @@ int main(int argc, char** argv)
     GLuint depthStencilRBO;
     glGenRenderbuffers(1, &depthStencilRBO);
     glBindRenderbuffer(GL_RENDERBUFFER, depthStencilRBO);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, texW, texH);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, fbW, fbH);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencilRBO);
 
     GLuint highlightTexture;
     glGenTextures(1, &highlightTexture);
     glBindTexture(GL_TEXTURE_2D, highlightTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, texW, texH, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, fbW, fbH, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, highlightTexture, 0);
@@ -332,7 +335,7 @@ int main(int argc, char** argv)
 
     int width, height, nrComponents;
     stbi_set_flip_vertically_on_load(true);
-    float* data = stbi_loadf("EnvironmentMaps/burnt_warehouse.hdr", &width, &height, &nrComponents, 0);
+    float* data = stbi_loadf("EnvironmentMaps/studio.hdr", &width, &height, &nrComponents, 0);
     GLuint hdrTexture;
     if (data)
     {
@@ -403,7 +406,7 @@ int main(int argc, char** argv)
     {
         // note that we store each face with 16 bit floating point values
         glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F,
-            512, 512, 0, GL_RGB, GL_FLOAT, nullptr);
+            width, width, 0, GL_RGB, GL_FLOAT, nullptr);
     }
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
@@ -418,7 +421,7 @@ int main(int argc, char** argv)
     // TODO: we don't need depth buffer so remove
     glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
     glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, width);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, captureRBO);
 
     Shader equirectToCubemapShader = Shader("Shaders/equirectToCubemap.vert", "Shaders/equirectToCubemap.frag");
@@ -427,7 +430,7 @@ int main(int argc, char** argv)
     glBindTexture(GL_TEXTURE_2D, hdrTexture);
     equirectToCubemapShader.SetInt("equirectangularMap", 0);
 
-    glViewport(0, 0, 512, 512);
+    glViewport(0, 0, width, width);
     //glDisable(GL_CULL_FACE);
     //glDepthFunc(GL_LEQUAL);
 
@@ -496,7 +499,7 @@ int main(int argc, char** argv)
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap);
     prefilterShader.SetInt("environmentMap", 0);
-    prefilterShader.SetFloat("environmentMapResolution", 512.0f);
+    prefilterShader.SetFloat("environmentMapResolution", width);
     glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
 
     unsigned int maxMipLevels = 5;
@@ -604,7 +607,7 @@ int main(int argc, char** argv)
     {
         selectedModelIndex++;
     }
-    Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap, irradianceMap, prefilterMap, brdfLUT);
+    Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fbW, fbH, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap, irradianceMap, prefilterMap, brdfLUT);
 
     Shader postprocessShader = Shader("Shaders/fullscreen.vert", "Shaders/postprocess.frag");
 
@@ -670,7 +673,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap, irradianceMap, prefilterMap, brdfLUT);
+            selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fbW, fbH, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap, irradianceMap, prefilterMap, brdfLUT);
         }
 
         if (selectedScene)
@@ -679,7 +682,7 @@ int main(int argc, char** argv)
         }
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glViewport(0, 0, windowWidth, windowHeight);
+        glViewport(0, 0, display_w, display_h);
         glBindVertexArray(fullscreenQuadVAO);
         postprocessShader.use();
         glActiveTexture(GL_TEXTURE0);
@@ -692,6 +695,7 @@ int main(int argc, char** argv)
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+        glViewport(0, 0, fbW, fbH);
         static GLuint binaryImageClearValue = 0;
         static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
         glClearBufferfv(GL_COLOR, 0, &clear_color.x);

@@ -14,7 +14,7 @@
 class Scene
 {
 public:
-	Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int windowWidth, int windowHeight, GLuint fbo,
+	Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int fbW, int fbH, GLuint fbo,
 		GLuint fullscreenQuadVAO,
 		GLuint colorTexture,
 		GLuint highlightTexture,
@@ -80,7 +80,7 @@ private:
 	GLuint lineVAO;
 	GLuint frustumVAO;
 	GLuint frustumVBO;
-	int texW, texH; // TODO: fix this nonsensical naming
+	int fbW, fbH;
 	bool firstFrame = true;
 	GLuint skyboxVAO;
 	GLuint environmentMap;
