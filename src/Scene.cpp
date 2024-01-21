@@ -375,57 +375,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int win
 
 	for (int i = 0; i < lights.size(); i++)
 	{
-		const Light& light = lights[i];
-		if (light.type == Light::Point)
-		{
-			GLuint fbo = depthMapFBOs[i];
-			glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
-			GLuint depthCubemapTexture = depthMaps[i];
-			glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemapTexture);
-			for (int i = 0; i < 6; i++)
-			{
-				glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, shadowMapWidth, shadowMapHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-			}
-
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-
-			glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthCubemapTexture, 0);
-			glDrawBuffer(GL_NONE);
-			glReadBuffer(GL_NONE);
-			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-				std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		}
-		else
-		{
-			GLuint fbo = depthMapFBOs[i];
-			glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-
-			GLuint depthTexture = depthMaps[i];
-			glBindTexture(GL_TEXTURE_2D, depthTexture);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadowMapWidth, shadowMapHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-			glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, depthTexture, 0);
-			glDrawBuffer(GL_NONE);
-			glReadBuffer(GL_NONE);
-			if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-				std::cerr << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		}
+		GenerateShadowMap(i);
 	}
 
 	// TODO: put this somewhere else
@@ -1269,17 +1219,23 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 			glm::mat4 lightProjection = projection * view;
 			RenderFrustum(lightProjection, light.depthmapNearPlane, light.depthmapFarPlane, viewProj);
 
+			glBindTexture(GL_TEXTURE_CUBE_MAP, depthMaps[entity.lightIdx]);
+			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_NONE); // Treat as normal texture so we can visualize it
+			GLuint debugRenderFaceTextureView;
+			glGenTextures(1, &debugRenderFaceTextureView);
+			glTextureView(debugRenderFaceTextureView, GL_TEXTURE_2D, depthMaps[entity.lightIdx], GL_DEPTH_COMPONENT24, 0, 1, light.debugShadowMapRenderFace, 1);
 
 			glViewport(0, 0, shadowMapVisualizerDims, shadowMapVisualizerDims);
 			glBindVertexArray(fullscreenQuadVAO);
 			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_CUBE_MAP, depthMaps[entity.lightIdx]);
-			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_NONE); // Treat as normal texture so we can visualize it
+			glBindTexture(GL_TEXTURE_2D, debugRenderFaceTextureView);
 			perspectiveDepthCubeMapShader.use();
 			perspectiveDepthCubeMapShader.SetInt("depthMap", 0);
 			perspectiveDepthCubeMapShader.SetFloat("nearPlane", light.depthmapNearPlane);
 			perspectiveDepthCubeMapShader.SetFloat("farPlane", light.depthmapFarPlane);
-			perspectiveDepthCubeMapShader.SetInt("face", light.debugShadowMapRenderFace);
+			// Flip U and V if needed to align them with right-hand coordinate system (-z forward) https://www.khronos.org/opengl/wiki/Cubemap_Texture
+			bool flipUV = light.debugShadowMapRenderFace == 0 || light.debugShadowMapRenderFace == 1 || light.debugShadowMapRenderFace == 4 || light.debugShadowMapRenderFace == 5;
+			perspectiveDepthCubeMapShader.SetBool("flipUV", flipUV);
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE); // Treat as shadow texture
 		}
@@ -1525,10 +1481,7 @@ void Scene::GenerateShadowMap(int lightIdx)
 
 		GLuint depthCubemapTexture = depthMaps[lightIdx];
 		glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemapTexture);
-		for (int i = 0; i < 6; i++)
-		{
-			glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_DEPTH_COMPONENT, shadowMapWidth, shadowMapHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-		}
+		glTexStorage2D(GL_TEXTURE_CUBE_MAP, 6, GL_DEPTH_COMPONENT24, shadowMapWidth, shadowMapHeight);
 
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
 		glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
