@@ -87,6 +87,8 @@ private:
 	GLuint irradianceMap;
 	GLuint prefilterMap;
 	GLuint brdfLUT;
+	int selectedBackgroundIdx = 0;
+	float prefilterMapRoughness = 0.0f;
 	// TODO: make shadow map size tweakable? And in general allow for shadow options like toggling shadows
 	static constexpr int shadowMapWidth = 2048;
 	static constexpr int shadowMapHeight = 2048;

@@ -889,6 +889,39 @@ void Scene::RenderUI()
 	}
 
 	ImGui::End();
+
+	ImGui::Begin("Lighting");
+	ImGui::SliderFloat("Exposure", &exposure, 0.0f, 10.0f);
+	static std::vector<std::string> backgrounds = {
+		"Environment map",
+		"Irradiance map",
+		"Prefilter map"
+	};
+	const int num_models = (int)backgrounds.size();
+	auto& model_combo_preview_value = backgrounds[selectedBackgroundIdx];
+	if (ImGui::BeginCombo("Background", model_combo_preview_value.c_str()))
+	{
+		for (int n = 0; n < num_models; n++)
+		{
+			const bool is_selected = (selectedBackgroundIdx == n);
+			if (ImGui::Selectable(backgrounds[n].c_str(), is_selected))
+			{
+				selectedBackgroundIdx = n;
+			}
+
+			// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+			if (is_selected)
+			{
+				ImGui::SetItemDefaultFocus();
+			}
+		}
+		ImGui::EndCombo();
+	}
+	if (selectedBackgroundIdx == 2) // prefilter map
+	{
+		ImGui::SliderFloat("Roughness", &prefilterMapRoughness, 0.0f, 1.0f);
+	}
+	ImGui::End();
 	
 	if (selectedEntityIdx >= 0)
 	{
@@ -1412,7 +1445,22 @@ void Scene::RenderSkybox(const glm::mat4& view, const glm::mat4& proj)
 	skyboxShader.SetMat4("projection", glm::value_ptr(proj));
 	skyboxShader.SetMat4("rotView", glm::value_ptr(rotView));
 	glActiveTexture(GL_TEXTURE0);
+	if (selectedBackgroundIdx == 0)
+	{
+		skyboxShader.SetFloat("levelOfDetail", 0.0f);
 	glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap);
+	}
+	else if (selectedBackgroundIdx == 1)
+	{
+		skyboxShader.SetFloat("levelOfDetail", 0.0f);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap);
+	}
+	else
+	{
+		constexpr int maxLod = 4; // TODO: don't hardcode
+		skyboxShader.SetFloat("levelOfDetail", prefilterMapRoughness * maxLod);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap);
+	}
 	skyboxShader.SetInt("environmentMap", 0);
 	glDrawArrays(GL_TRIANGLES, 0, 36);
 	glDepthFunc(GL_LESS);
