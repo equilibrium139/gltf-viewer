@@ -11,7 +11,10 @@
         vec3 positionVS;
         float intensity;
 
-        float depthCubemapFarPlane;
+        // scale and offset used to convert depths for depth map comparisons 
+        // equal to 3rd and 4th values in 3rd column of perspective matrix respectively
+        float depthScale;
+        float depthOffset;
         float shadowMappingBias;
     };
 
@@ -216,15 +219,19 @@ void main()
         float denominator = 4.0 * max(dot(unitNormal, surfaceToCamera), 0.0) * max(dot(unitNormal, surfaceToLight), 0.0) + 0.0001;
         vec3 specular = numerator / denominator;
         float geometryTerm = max(dot(surfaceToLight, unitNormal), 0.0);
+
         vec3 lightToSurfaceWS = (vec3(viewToWorld * vec4((fsIn.surfacePosVS - light.positionVS), 0.0)));
         
-        // view transformation preserves distance so this distance is the same as world space distance
-        // float lightToSurfaceDepth = surfaceToLightDistance / light.depthCubemapFarPlane;
+        // Intuition for this: assume x coordinate is largest magnitude coordinate in the vector and it's positive. 
+        // This means we will sample from +x face of the cubemap. The depths in the +x face of the cubemap are generated using
+        // a camera looking down the world space +x axis, so they are simply the world space x offset from the point light.
+        float lightToSurfaceDepth = max(max(abs(lightToSurfaceWS.x), abs(lightToSurfaceWS.y)), abs(lightToSurfaceWS.z));
 
-        float lightToSurfaceDepth = abs(lightToSurfaceWS.z) / light.depthCubemapFarPlane;
-
+        lightToSurfaceDepth = (light.depthScale * lightToSurfaceDepth + light.depthOffset) / lightToSurfaceDepth; // [-1, 1]
+        lightToSurfaceDepth = (lightToSurfaceDepth + 1.0) * 0.5; // [0, 1]
         vec4 cubeMapCoord = vec4(lightToSurfaceWS, lightToSurfaceDepth - light.shadowMappingBias);
         float shadow = texture(depthCubemaps[i], cubeMapCoord);
+
         vec3 color = geometryTerm * radiance * shadow * (kD * baseColor.rgb / PI + specular);
         finalColor += color;
     }

@@ -6,6 +6,7 @@ uniform sampler2D depthMap;
 uniform float nearPlane;
 uniform float farPlane;
 
+// https://www.desmos.com/calculator/72s9kyuqua
 float LinearizeDepth(float depth)
 {
     float z = depth * 2.0 - 1.0; // Back to NDC 

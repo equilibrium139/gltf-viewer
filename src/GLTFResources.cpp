@@ -173,7 +173,7 @@ Shader& GLTFResources::GetOrCreateDepthShader(VertexAttribute attributes, bool d
 	}
 	else
 	{
-		depthShaders.push_back({ { relevantAttributes, true }, Shader("Shaders/worldspace.vert", "Shaders/cubedepth.frag", "Shaders/cubedepth.geom", defines)});
+		depthShaders.push_back({ { relevantAttributes, true }, Shader("Shaders/worldspace.vert", "Shaders/empty.frag", "Shaders/cubedepth.geom", defines)});
 	}
 	return depthShaders.back().second;
 }

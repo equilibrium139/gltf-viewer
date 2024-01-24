@@ -32,7 +32,7 @@ public:
 private:
 	void Render(int windowWidth, int windowHeight);
 	// Assumes global transforms are up to date
-	void RenderShadowMaps(const glm::mat4& view);
+	void RenderShadowMaps();
 	void RenderUI();
 	void RenderHierarchyUI(int entityIdx);
 	void RenderBoundingBox(const BBox& bbox, const glm::mat4& mvp);

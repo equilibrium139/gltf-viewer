@@ -649,14 +649,6 @@ int main(int argc, char** argv)
 
         ImGui::End();
 
-
-        if (selectedScene)
-        {
-            ImGui::Begin("Lighting");   
-            ImGui::SliderFloat("Exposure", &selectedScene->exposure, 0.0f, 10.0f);
-            ImGui::End();
-        }
-
         // Rendering
         int display_w, display_h;
         glfwGetFramebufferSize(window, &display_w, &display_h);

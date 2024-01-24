@@ -428,7 +428,7 @@ void Scene::Render(int windowWidth, int windowHeight)
 {
 	const auto view = currentCamera->GetViewMatrix();
 	const auto viewToWorld = glm::inverse(view);
-	RenderShadowMaps(view);
+	RenderShadowMaps();
 
 	//const float aspectRatio = windowHeight > 0 ? (float)windowWidth / (float)windowHeight : 1.0f;
 	const auto projection = currentCamera->GetProjectionMatrix();
@@ -451,7 +451,7 @@ void Scene::Render(int windowWidth, int windowHeight)
 		switch (light.type) 
 		{
 		case Light::Point:
-			pointLights.emplace_back(light.color, lightPosVS, light.range, light.intensity, light.depthmapFarPlane, light.shadowMappingBias);
+			pointLights.emplace_back(light.color, lightPosVS, light.range, light.intensity, light.depthmapNearPlane, light.depthmapFarPlane, light.shadowMappingBias);
 			numLights[0]++;
 			break;
 		case Light::Spot:
@@ -687,7 +687,7 @@ void Scene::Render(int windowWidth, int windowHeight)
 	//RenderBoundingBox(sceneBoundingBox, projection * view);
 }
 
-void Scene::RenderShadowMaps(const glm::mat4& view)
+void Scene::RenderShadowMaps()
 {
 	for (int lightIdx = 0; lightIdx < lights.size(); lightIdx++)
 	{
@@ -792,8 +792,6 @@ void Scene::RenderShadowMaps(const glm::mat4& view)
 						depthShader.SetMat4("lightProjectionMatrices[4]", glm::value_ptr(lightProjectionMatrices[4]));
 						depthShader.SetMat4("lightProjectionMatrices[5]", glm::value_ptr(lightProjectionMatrices[5]));
 						depthShader.SetMat4("world", glm::value_ptr(entityGlobalTransform));
-						depthShader.SetFloat("farPlane", light.depthmapFarPlane);
-						depthShader.SetVec3("lightPosWS", lightPositionWS);
 					}
 					else
 					{

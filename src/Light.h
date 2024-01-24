@@ -25,6 +25,7 @@ struct Light {
 	float depthmapNearPlane = 0.001f;
 	float depthmapFarPlane = 50.0f;
 	float shadowMappingBias = 0.001f;
+	float maxSlopeScaleBias = 0.001f;
 	glm::mat4 lightProjection;
 	int entityIdx; // must be >= 0
 	int debugShadowMapRenderFace = 0; // for rendering shadow map visualizer for point light depth cube map
@@ -38,12 +39,14 @@ struct PointLight {
 	glm::vec3 positionVS;
 	float intensity;
 
-	float depthCubemapFarPlane;
+	float depthScale;
+	float depthOffset;
 	float shadowMappingBias;
-	float pad0, pad1; 
+	float pad0; 
 
-	PointLight(glm::vec3 color, glm::vec3 position, float range, float intensity, float depthCubemapFarPlane, float shadowMappingBias)
-		:color(color), range(range), positionVS(position), intensity(intensity), depthCubemapFarPlane(depthCubemapFarPlane), shadowMappingBias(shadowMappingBias)  {}
+	PointLight(glm::vec3 color, glm::vec3 position, float range, float intensity, float depthNear, float depthFar, float shadowMappingBias)
+		:color(color), range(range), positionVS(position), intensity(intensity), depthScale((depthFar + depthNear)/(depthFar - depthNear)), 
+			depthOffset(-(2 * depthFar * depthNear) / (depthFar - depthNear)), shadowMappingBias(shadowMappingBias)  {}
 };
 
 struct SpotLight {
@@ -75,8 +78,8 @@ struct DirectionalLight {
 	float intensity;
 
 	glm::vec3 directionVS;
-	float pad0;
+	float maxSlopeScaleBias;
 
-	DirectionalLight(glm::vec3 color, glm::vec3 direction, float intensity)
-		:color(color), directionVS(glm::normalize(direction)), intensity(intensity) {}
+	DirectionalLight(glm::vec3 color, glm::vec3 direction, float intensity, float maxSlopeScaleBias=0.01)
+		:color(color), directionVS(glm::normalize(direction)), intensity(intensity), maxSlopeScaleBias(maxSlopeScaleBias) {}
 };
