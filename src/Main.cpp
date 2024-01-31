@@ -151,6 +151,51 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
     return &pair.first->second;
 }
 
+struct CubemapFile
+{
+    static constexpr std::uint32_t correctMagicNumber = ' SDD';
+    struct Header
+    {
+        std::uint32_t magicNumber = correctMagicNumber;
+        std::uint32_t mipmapLevels;
+        std::uint32_t width;
+        std::uint32_t height;
+        // TODO: specify pixel format
+    };
+    Header header;
+    std::vector<std::uint8_t> pixels;
+};
+
+GLuint ReadCubemapFile(const char* path)
+{
+    std::ifstream file(path, std::ios::binary);
+
+    CubemapFile data;
+    file.read((char*)&data.header, sizeof(data.header));
+    assert(data.header.magicNumber == CubemapFile::correctMagicNumber);
+    const auto width = data.header.width;
+    const auto height = data.header.height;
+    data.pixels.resize(width * height * 6);
+    file.read((char*)&data.pixels[0], data.pixels.size());
+
+    GLuint cubemap;
+    glGenTextures(1, &cubemap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        //glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT,
+            //width, height, 0, GL_RGB, GL_FLOAT, nullptr);
+        glCompressedTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT, width, height, 0, width * height, &data.pixels[width * height * i]);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    return cubemap;
+}
+
 int main(int argc, char** argv)
 {
     if (!glfwInit())
@@ -333,29 +378,6 @@ int main(int argc, char** argv)
     glBufferData(GL_UNIFORM_BUFFER, Shader::maxPointLights * sizeof(PointLight) + Shader::maxSpotLights * sizeof(SpotLight) + Shader::maxDirLights * sizeof(DirectionalLight) + 3 * sizeof(int), NULL, GL_STATIC_DRAW);
     glBindBufferBase(GL_UNIFORM_BUFFER, 1, lightsUBO);    
 
-    int width, height, nrComponents;
-    stbi_set_flip_vertically_on_load(true);
-    float* data = stbi_loadf("EnvironmentMaps/studio.hdr", &width, &height, &nrComponents, 0);
-    GLuint hdrTexture;
-    if (data)
-    {
-        glGenTextures(1, &hdrTexture);
-        glBindTexture(GL_TEXTURE_2D, hdrTexture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, data);
-
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
-        stbi_image_free(data);
-    }
-    else
-    {
-        std::cout << "Failed to load HDR image." << std::endl;
-    }
-    stbi_set_flip_vertically_on_load(false);
-
     glm::vec3 cubeVertices[] = {
         {-1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, 1.0f}, {1.0f, -1.0f, 0.0f}, {1.0f, 1.0f, -1.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, -1.0f}, {-1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, 1.0f},  // POSITIVE_X
 
@@ -399,48 +421,13 @@ int main(int argc, char** argv)
     glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(glm::vec3), (const void*)(sizeof(glm::vec3)));
 
-    GLuint environmentMap;
-    glGenTextures(1, &environmentMap);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap);
-    for (unsigned int i = 0; i < 6; ++i)
-    {
-        // note that we store each face with 16 bit floating point values
-        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F,
-            width, width, 0, GL_RGB, GL_FLOAT, nullptr);
-    }
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    GLuint environmentMap = ReadCubemapFile("envmap.cubemap");
 
-    GLuint captureFBO, captureRBO;
+    GLuint captureFBO;
     glGenFramebuffers(1, &captureFBO);
-    glGenRenderbuffers(1, &captureRBO);
 
     // TODO: we don't need depth buffer so remove
     glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
-    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, width);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, captureRBO);
-
-    Shader equirectToCubemapShader = Shader("Shaders/equirectToCubemap.vert", "Shaders/equirectToCubemap.frag");
-    equirectToCubemapShader.use();
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, hdrTexture);
-    equirectToCubemapShader.SetInt("equirectangularMap", 0);
-
-    glViewport(0, 0, width, width);
-    //glDisable(GL_CULL_FACE);
-    //glDepthFunc(GL_LEQUAL);
-
-    for (unsigned int i = 0; i < 6; ++i)
-    {
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-            GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, environmentMap, 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (const void*)(i * 6 * sizeof(GLuint)));
-    }
 
     glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap);
     glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
@@ -461,8 +448,6 @@ int main(int argc, char** argv)
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
-    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 32, 32);
 
     Shader convolutionShader = Shader("Shaders/equirectToCubemap.vert", "Shaders/convolute.frag");
     glActiveTexture(GL_TEXTURE0);
@@ -478,7 +463,6 @@ int main(int argc, char** argv)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (const void*)(i * 6 * sizeof(GLuint)));
     }
-
 
     GLuint prefilterMap;
     glGenTextures(1, &prefilterMap);
@@ -499,7 +483,7 @@ int main(int argc, char** argv)
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap);
     prefilterShader.SetInt("environmentMap", 0);
-    prefilterShader.SetFloat("environmentMapResolution", width);
+    prefilterShader.SetFloat("environmentMapResolution", 2048); // TODO: don't hardcode this
     glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
 
     unsigned int maxMipLevels = 5;
@@ -508,8 +492,6 @@ int main(int argc, char** argv)
         // reisze framebuffer according to mip-level size.
         unsigned int mipWidth = 128 * std::pow(0.5, mip);
         unsigned int mipHeight = 128 * std::pow(0.5, mip);
-        glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, mipWidth, mipHeight);
         glViewport(0, 0, mipWidth, mipHeight);
 
         float roughness = (float)mip / (float)(maxMipLevels - 1);
@@ -535,8 +517,6 @@ int main(int argc, char** argv)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
-    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, brdfLUT, 0);
 
     glViewport(0, 0, 512, 512);
