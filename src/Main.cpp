@@ -153,18 +153,30 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
 
 struct CubemapFile
 {
-    static constexpr std::uint32_t correctMagicNumber = ' SDD';
+    static constexpr std::uint32_t correctMagicNumber = 'PMBC';
     struct Header
     {
         std::uint32_t magicNumber = correctMagicNumber;
         std::uint32_t mipmapLevels;
-        std::uint32_t width;
-        std::uint32_t height;
+        std::uint32_t resolution;
         // TODO: specify pixel format
     };
     Header header;
     std::vector<std::uint8_t> pixels;
 };
+
+int BytesPerFaceBC6(std::uint32_t resolution, std::uint32_t mipmapLevels)
+{
+    int bytesNeeded = resolution * resolution;
+
+    for (int i = 1; i < mipmapLevels; i++)
+    {
+        resolution = std::max(resolution / 2, 4u); // BC6 always works with 4x4 blocks
+        bytesNeeded += resolution * resolution;
+    }
+
+    return bytesNeeded;
+}
 
 GLuint ReadCubemapFile(const char* path)
 {
@@ -173,25 +185,33 @@ GLuint ReadCubemapFile(const char* path)
     CubemapFile data;
     file.read((char*)&data.header, sizeof(data.header));
     assert(data.header.magicNumber == CubemapFile::correctMagicNumber);
-    const auto width = data.header.width;
-    const auto height = data.header.height;
-    data.pixels.resize(width * height * 6);
+    const auto res = data.header.resolution;
+    int bytesPerFace = BytesPerFaceBC6(res, data.header.mipmapLevels);
+    data.pixels.resize(bytesPerFace * 6);
     file.read((char*)&data.pixels[0], data.pixels.size());
 
     GLuint cubemap;
     glGenTextures(1, &cubemap);
     glBindTexture(GL_TEXTURE_CUBE_MAP, cubemap);
-    for (unsigned int i = 0; i < 6; ++i)
-    {
-        //glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT,
-            //width, height, 0, GL_RGB, GL_FLOAT, nullptr);
-        glCompressedTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT, width, height, 0, width * height, &data.pixels[width * height * i]);
-    }
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    int byteOffset = 0;
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        int mipRes = res;
+
+        for (unsigned int j = 0; j < data.header.mipmapLevels; j++)
+        {
+            int imageSize = mipRes >= 4 ? mipRes * mipRes : 4 * 4;
+            glCompressedTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, j, GL_COMPRESSED_RGB_BPTC_UNSIGNED_FLOAT, mipRes, mipRes, 0, imageSize, &data.pixels[byteOffset]);
+            byteOffset += imageSize;
+            mipRes /= 2;
+        }
+    }
 
     return cubemap;
 }
@@ -422,16 +442,11 @@ int main(int argc, char** argv)
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 2 * sizeof(glm::vec3), (const void*)(sizeof(glm::vec3)));
 
     GLuint environmentMap = ReadCubemapFile("envmap.cubemap");
+    glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap);
 
     GLuint captureFBO;
     glGenFramebuffers(1, &captureFBO);
-
-    // TODO: we don't need depth buffer so remove
     glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
-
-    glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap);
-    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-
 
     GLuint irradianceMap;
     glGenTextures(1, &irradianceMap);
