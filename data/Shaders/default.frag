@@ -151,11 +151,9 @@ in VS_OUT {
 } fsIn;
 
 layout(location=0) out vec4 fragColor;
-layout(location=1) out float highlight;
 
 void main()
 {
-    highlight = 1;
 #ifdef HAS_NORMALS
     #ifdef HAS_TANGENTS
         mat3 normalizedTBN = mat3(normalize(fsIn.TBN[0]), normalize(fsIn.TBN[1]), normalize(fsIn.TBN[2]));
@@ -195,8 +193,6 @@ void main()
 
     vec3 finalColor = vec3(0.0);
 
-    // TODO: currently using non-constant expression (i) to index into sampler arrays, and this is not allowed
-    // in GL < 4.0: https://stackoverflow.com/questions/12030711/glsl-array-of-textures-of-differing-size/12031821#12031821
     for (int i = 0; i < numPointLights; i++) {
         PointLight light = pointLight[i];
         float surfaceToLightDistance = length(light.positionVS - fsIn.surfacePosVS);
@@ -238,7 +234,6 @@ void main()
     {
         SpotLight light = spotLight[i];
         float surfaceToLightDistance = length(light.positionVS - fsIn.surfacePosVS);
-        // TODO: do this for angle as well?
         if (surfaceToLightDistance > light.range) {
             continue;
         }

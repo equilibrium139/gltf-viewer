@@ -17,7 +17,7 @@ public:
 	Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int fbW, int fbH, GLuint fbo,
 		GLuint fullscreenQuadVAO,
 		GLuint colorTexture,
-		GLuint highlightTexture,
+		GLuint highlightFBO,
 		GLuint depthStencilRBO,
 		GLuint lightsUBO,
 		GLuint skyboxVAO,
@@ -45,6 +45,7 @@ private:
 	void RenderSelectedEntityVisuals(const glm::mat4& viewProj);
 	void ConfigureCamera(const BBox& bbox);
 	void RenderSkybox(const glm::mat4& view, const glm::mat4& proj);
+	void HighlightEntityHierarchy(int entityIdx, const glm::mat4& mvp);
 	std::vector<Animation> animations;
 	std::vector<Entity> entities;
 	std::vector<glm::mat4> globalTransforms;
@@ -65,6 +66,7 @@ private:
 	Shader orthographicDepthMapShader = Shader("Shaders/fullscreen.vert", "Shaders/orthographicDepthMapVisualizer.frag");
 	Shader skyboxShader = Shader("Shaders/skybox.vert", "Shaders/skybox.frag");
 	Shader visualShader = Shader("Shaders/visual.vert", "Shaders/visual.frag");
+	Shader highlightShader = Shader("Shaders/transform.vert", "Shaders/highlight.frag");
 	BBox sceneBoundingBox = {
 		.minXYZ = glm::vec3(FLT_MAX),
 		.maxXYZ = glm::vec3(-FLT_MAX),
@@ -72,7 +74,7 @@ private:
 	GLuint fbo;
 	GLuint fullscreenQuadVAO; // TODO: remove
 	GLuint colorTexture;
-	GLuint highlightTexture;
+	GLuint highlightFBO;
 	GLuint depthStencilRBO;
 	GLuint lightsUBO;
 	GLuint circleVAO; // TODO: find a better place for visual vertex buffers

@@ -115,7 +115,7 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
     GLuint fbH,
     GLuint fullscreenQuadVAO,
     GLuint colorTexture,
-    GLuint highlightTexture,
+    GLuint highlightFBO,
     GLuint depthStencilRBO,
     GLuint lightsUBO,
     GLuint skyboxVAO,
@@ -147,7 +147,7 @@ Scene* LoadScene(const std::string& modelName, std::unordered_map<std::string, S
     }
 
     assert(model.scenes.size() == 1); // cba
-    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model, fbW, fbH, fbo, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap, irradianceMap, prefilterMap, brdfLUT));
+    auto pair = scenes.emplace(std::piecewise_construct, std::forward_as_tuple(modelName), std::forward_as_tuple(model.scenes[0], model, fbW, fbH, fbo, fullscreenQuadVAO, colorTexture, highlightFBO, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap, irradianceMap, prefilterMap, brdfLUT));
     return &pair.first->second;
 }
 
@@ -382,16 +382,24 @@ int main(int argc, char** argv)
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, fbW, fbH);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthStencilRBO);
 
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    GLuint highlightFBO;
+    glGenFramebuffers(1, &highlightFBO);
+    glBindFramebuffer(GL_FRAMEBUFFER, highlightFBO);
+    glViewport(0, 0, windowWidth, windowHeight);
+
     GLuint highlightTexture;
     glGenTextures(1, &highlightTexture);
     glBindTexture(GL_TEXTURE_2D, highlightTexture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, fbW, fbH, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, highlightTexture, 0);
-
-    static const GLenum drawBuffers[] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1 };
-    glDrawBuffers(2, drawBuffers); // this is framebuffer state so we only need to set it once
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, highlightTexture, 0);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
@@ -538,7 +546,7 @@ int main(int argc, char** argv)
     {
         selectedModelIndex++;
     }
-    Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fbW, fbH, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap, irradianceMap, prefilterMap, brdfLUT);
+    Scene* selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fbW, fbH, fullscreenQuadVAO, colorTexture, highlightFBO, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap, irradianceMap, prefilterMap, brdfLUT);
 
     Shader postprocessShader = Shader("Shaders/fullscreen.vert", "Shaders/postprocess.frag");
 
@@ -596,7 +604,7 @@ int main(int argc, char** argv)
         }
         else
         {
-            selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fbW, fbH, fullscreenQuadVAO, colorTexture, highlightTexture, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap, irradianceMap, prefilterMap, brdfLUT);
+            selectedScene = LoadScene(sampleModelNames[selectedModelIndex], sampleModels, fbo, fbW, fbH, fullscreenQuadVAO, colorTexture, highlightFBO, depthStencilRBO, lightsUBO, skyboxVAO, environmentMap, irradianceMap, prefilterMap, brdfLUT);
         }
 
         if (selectedScene)
@@ -619,14 +627,14 @@ int main(int argc, char** argv)
 
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         glViewport(0, 0, fbW, fbH);
-        static GLuint binaryImageClearValue = 0;
         static ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
-        glClearBufferfv(GL_COLOR, 0, &clear_color.x);
+        glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
-        glColorMaski(1, 0xFF, 0xFF, 0xFF, 0xFF); // ensure the texture used for highlighting can be cleared
-        glClearBufferuiv(GL_COLOR, 1, &binaryImageClearValue);
-
-        glClear(GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        glBindFramebuffer(GL_FRAMEBUFFER, highlightFBO);
+        glViewport(0, 0, fbW, fbH);
+        static GLuint binaryImageClearValue = 0;
+        glClearBufferuiv(GL_COLOR, 0, &binaryImageClearValue);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
 

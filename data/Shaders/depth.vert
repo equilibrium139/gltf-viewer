@@ -1,3 +1,4 @@
+// TODO: combine with transform.vert (this is redundant)
 layout(location = 0) in vec3 aBasePos;
 
 #ifdef HAS_JOINTS

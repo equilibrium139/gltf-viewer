@@ -10,7 +10,7 @@
 Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int fbW, int fbH, GLuint fbo,
 	GLuint fullscreenQuadVAO,
 	GLuint colorTexture,
-	GLuint highlightTexture,
+	GLuint highlightFBO,
 	GLuint depthStencilRBO,
 	GLuint lightsUBO,
 	GLuint skyboxVAO,
@@ -18,7 +18,7 @@ Scene::Scene(const tinygltf::Scene& scene, const tinygltf::Model& model, int fbW
 	GLuint irradianceMap, 
 	GLuint prefilterMap,
 	GLuint brdfLUT)
-	:resources(model), fbo(fbo), fullscreenQuadVAO(fullscreenQuadVAO), colorTexture(colorTexture), highlightTexture(highlightTexture), depthStencilRBO(depthStencilRBO), fbW(fbW), fbH(fbH), lightsUBO(lightsUBO), skyboxVAO(skyboxVAO), environmentMap(environmentMap), irradianceMap(irradianceMap), prefilterMap(prefilterMap),
+	:resources(model), fbo(fbo), fullscreenQuadVAO(fullscreenQuadVAO), colorTexture(colorTexture), highlightFBO(highlightFBO), depthStencilRBO(depthStencilRBO), fbW(fbW), fbH(fbH), lightsUBO(lightsUBO), skyboxVAO(skyboxVAO), environmentMap(environmentMap), irradianceMap(irradianceMap), prefilterMap(prefilterMap),
 	 brdfLUT(brdfLUT)
 {
 	assert(model.scenes.size() == 1); // for now
@@ -486,15 +486,6 @@ void Scene::Render(int windowWidth, int windowHeight)
 		{
 			continue;
 		}
-		bool highlight = selectedEntityIdx == i || IsParent(i, selectedEntityIdx);
-		if (highlight)
-		{
-			glColorMaski(1, 0xFF, 0xFF, 0xFF, 0xFF);
-		}
-		else
-		{
-			glColorMaski(1, 0x00, 0x00, 0x00, 0x00);
-		}
 		const glm::mat4& globalTransform = globalTransforms[i];
 		glm::mat4 modelView = view * globalTransform;
 		Mesh& entityMesh = resources.meshes[entity.meshIdx];
@@ -791,7 +782,7 @@ void Scene::RenderShadowMaps()
 						depthShader.SetMat4("lightProjectionMatrices[3]", glm::value_ptr(lightProjectionMatrices[3]));
 						depthShader.SetMat4("lightProjectionMatrices[4]", glm::value_ptr(lightProjectionMatrices[4]));
 						depthShader.SetMat4("lightProjectionMatrices[5]", glm::value_ptr(lightProjectionMatrices[5]));
-						depthShader.SetMat4("world", glm::value_ptr(entityGlobalTransform));
+						depthShader.SetMat4("transform", glm::value_ptr(entityGlobalTransform));
 					}
 					else
 					{
@@ -1195,6 +1186,11 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 
 	const Entity& entity = entities[selectedEntityIdx];
 	const glm::mat4& globalTransform = globalTransforms[selectedEntityIdx];
+
+	glBindFramebuffer(GL_FRAMEBUFFER, highlightFBO);
+	glViewport(0, 0, fbW, fbH);
+	HighlightEntityHierarchy(selectedEntityIdx, viewProj);
+	
 	glm::vec3 position = globalTransform[3];
 	if (entity.lightIdx >= 0)
 	{
@@ -1465,6 +1461,46 @@ void Scene::RenderSkybox(const glm::mat4& view, const glm::mat4& proj)
 	glDrawArrays(GL_TRIANGLES, 0, 36);
 	glDepthFunc(GL_LESS);
 	glEnable(GL_CULL_FACE);
+}
+
+void Scene::HighlightEntityHierarchy(int entityIdx, const glm::mat4& viewProj)
+{
+	const Entity& entity = entities[entityIdx];
+	glm::mat4 mvp = viewProj * globalTransforms[entityIdx];
+	highlightShader.use();
+	highlightShader.SetMat4("transform", glm::value_ptr(mvp));
+	if (entity.meshIdx >= 0)
+	{
+		const Mesh& mesh = resources.meshes[entity.meshIdx];
+		for (const Submesh& submesh : mesh.submeshes)
+		{
+			if (entity.skeletonIdx >= 0)
+			{
+				auto skinningMatrices = ComputeSkinningMatrices(skeletons[entity.skeletonIdx], entities);
+				highlightShader.SetMat4("skinningMatrices", glm::value_ptr(skinningMatrices.front()), (int)skinningMatrices.size());
+			}
+			bool hasMorphTargets = HasFlag(submesh.flags, VertexAttribute::MORPH_TARGET0_POSITION);
+			if (hasMorphTargets)
+			{
+				highlightShader.SetFloat("morph1Weight", entity.morphTargetWeights[0]);
+				highlightShader.SetFloat("morph2Weight", entity.morphTargetWeights[1]);
+			}
+			glBindVertexArray(submesh.VAO);
+			if (submesh.hasIndexBuffer)
+			{
+				glDrawElements(GL_TRIANGLES, submesh.countVerticesOrIndices, GL_UNSIGNED_INT, nullptr);
+			}
+			else
+			{
+				glDrawArrays(GL_TRIANGLES, 0, submesh.countVerticesOrIndices);
+			}
+		}
+	}
+
+	for (int i : entity.children)
+	{
+		HighlightEntityHierarchy(i, viewProj);
+	}
 }
 
 void Scene::ComputeSceneBoundingBox()

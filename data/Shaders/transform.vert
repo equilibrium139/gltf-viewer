@@ -1,3 +1,4 @@
+// Used to transform vertices for things like shadow maps where shading related geometry (normals, tangents, vertex color, etc) is irrelevant
 layout(location = 0) in vec3 aBasePos;
 
 #ifdef HAS_JOINTS
@@ -10,7 +11,7 @@ layout(location = 5) in vec3 aMorphBasePosDifference1;
 layout(location = 6) in vec3 aMorphBasePosDifference2;
 #endif // HAS_MORPH_TARGETS
 
-uniform mat4 world;
+uniform mat4 transform;
 
 #ifdef HAS_JOINTS
 uniform mat4 skinningMatrices[128];
@@ -39,5 +40,5 @@ void main()
                     morph2Weight * aMorphBasePosDifference2;
 #endif // HAS_MORPH_TARGETS
 
-    gl_Position = world * vec4(modelPos, 1.0);
+    gl_Position = transform * vec4(modelPos, 1.0);
 }
