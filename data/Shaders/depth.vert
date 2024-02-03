@@ -23,12 +23,11 @@ uniform float morph2Weight;
 
 void main()
 {
-    mat4 skinningMatrix = mat4(1.0); // TODO: move this into ifdef?
     vec3 surfacePos = aBasePos;
 
 #ifdef HAS_JOINTS
     vec4 modelSpaceVertex = vec4(surfacePos, 1.0);
-    skinningMatrix = aWeights.x * skinningMatrices[aJoints & 0xFFu] +
+    mat4 skinningMatrix = aWeights.x * skinningMatrices[aJoints & 0xFFu] +
                   aWeights.y * skinningMatrices[(aJoints >> 8) & 0xFFu] +
                   aWeights.z * skinningMatrices[(aJoints >> 16) & 0xFFu] +
                   aWeights.w * skinningMatrices[(aJoints >> 24) & 0xFFu];

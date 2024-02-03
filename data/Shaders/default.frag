@@ -1,5 +1,3 @@
-#define PI 3.14159
-
 // Lighting only make sense if normals are avaialable
 #if defined(HAS_NORMALS) || defined(FLAT_SHADING)
 

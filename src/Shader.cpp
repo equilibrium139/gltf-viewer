@@ -11,6 +11,7 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	defaultDefinesString += "#define MAX_NUM_POINT_LIGHTS " + std::to_string(maxPointLights) + "\n";
 	defaultDefinesString += "#define MAX_NUM_SPOT_LIGHTS " + std::to_string(maxSpotLights) + "\n";
 	defaultDefinesString += "#define MAX_NUM_DIR_LIGHTS " + std::to_string(maxDirLights) + "\n";
+	defaultDefinesString += "#define PI 3.14159265359\n";
 
 	auto vertexSource = get_file_contents(vertexPath);
 	auto fragmentSource = get_file_contents(fragmentPath);
@@ -22,6 +23,7 @@ Shader::Shader(const char * vertexPath, const char * fragmentPath, const char * 
 	for (const std::string& define : defines)
 	{
 		definesString += "#define " + define + "\n";
+		std::cout << define << '\n';
 	}
 
 	const char* vShaderSources[4] = { version.c_str(), definesString.c_str(), defaultDefinesString.c_str(),  vShaderCode};

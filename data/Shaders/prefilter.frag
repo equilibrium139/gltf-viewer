@@ -5,9 +5,6 @@ uniform samplerCube environmentMap;
 uniform float roughness;
 uniform float environmentMapResolution;
 
-// TODO: implement as define
-const float PI = 3.14159265359;
-
 float DistributionGGX(vec3 N, vec3 H, float roughness)
 {
     float a = roughness*roughness;

@@ -76,7 +76,6 @@ out VS_OUT {
     #endif // HAS_VERTEX_COLORS
 
 #if defined(HAS_NORMALS) || defined(FLAT_SHADING)
-    // TODO: ridiculous name, consider renaming
     vec4 surfacePosShadowMapUVSpace[MAX_NUM_SPOT_LIGHTS + MAX_NUM_DIR_LIGHTS];
 #endif 
 
@@ -90,12 +89,10 @@ void main()
     vec3 normal = aBaseNormal;
 #endif // HAS_NORMALS
 
-    mat4 skinningMatrix = mat4(1.0); // TODO: move this into ifdef?
-
 // TODO: make sure skeletal animation is independent of morph target animation
 #ifdef HAS_JOINTS
     vec4 modelSpaceVertex = vec4(surfacePos, 1.0);
-    skinningMatrix = aWeights.x * skinningMatrices[aJoints & 0xFFu] +
+    mat4 skinningMatrix = aWeights.x * skinningMatrices[aJoints & 0xFFu] +
                   aWeights.y * skinningMatrices[(aJoints >> 8) & 0xFFu] +
                   aWeights.z * skinningMatrices[(aJoints >> 16) & 0xFFu] +
                   aWeights.w * skinningMatrices[(aJoints >> 24) & 0xFFu];

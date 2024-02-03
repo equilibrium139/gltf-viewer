@@ -3,9 +3,6 @@ in vec3 dir;
 
 uniform samplerCube environmentMap;
 
-// TODO: implement as define
-const float PI = 3.14159265359;
-
 // Compute the irradiance from the hemisphere of directions centered at dir
 void main()
 {		

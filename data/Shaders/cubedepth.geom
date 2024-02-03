@@ -1,5 +1,5 @@
 layout (triangles) in;
-layout (triangle_strip, max_vertices=18) out; // TODO: investigate
+layout (triangle_strip, max_vertices=18) out;
 
 uniform mat4 lightProjectionMatrices[6];
 
