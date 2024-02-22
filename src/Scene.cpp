@@ -1190,6 +1190,9 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 	glBindFramebuffer(GL_FRAMEBUFFER, highlightFBO);
 	glViewport(0, 0, fbW, fbH);
 	HighlightEntityHierarchy(selectedEntityIdx, viewProj);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glViewport(0, 0, fbW, fbH);
 	
 	glm::vec3 position = globalTransform[3];
 	if (entity.lightIdx >= 0)
