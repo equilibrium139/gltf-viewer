@@ -1249,15 +1249,13 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 			glm::mat4 lightProjection = projection * view;
 			RenderFrustum(lightProjection, light.depthmapNearPlane, light.depthmapFarPlane, viewProj);
 
+			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_CUBE_MAP, depthMaps[entity.lightIdx]);
 			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_NONE); // Treat as normal texture so we can visualize it
+			
 			GLuint debugRenderFaceTextureView;
 			glGenTextures(1, &debugRenderFaceTextureView);
 			glTextureView(debugRenderFaceTextureView, GL_TEXTURE_2D, depthMaps[entity.lightIdx], GL_DEPTH_COMPONENT24, 0, 1, light.debugShadowMapRenderFace, 1);
-
-			glViewport(0, 0, shadowMapVisualizerDims, shadowMapVisualizerDims);
-			glBindVertexArray(fullscreenQuadVAO);
-			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, debugRenderFaceTextureView);
 			perspectiveDepthCubeMapShader.use();
 			perspectiveDepthCubeMapShader.SetInt("depthMap", 0);
@@ -1266,6 +1264,8 @@ void Scene::RenderSelectedEntityVisuals(const glm::mat4& viewProj)
 			// Flip U and V if needed to align them with right-hand coordinate system (-z forward) https://www.khronos.org/opengl/wiki/Cubemap_Texture
 			bool flipUV = light.debugShadowMapRenderFace == 0 || light.debugShadowMapRenderFace == 1 || light.debugShadowMapRenderFace == 4 || light.debugShadowMapRenderFace == 5;
 			perspectiveDepthCubeMapShader.SetBool("flipUV", flipUV);
+			glViewport(0, 0, shadowMapVisualizerDims, shadowMapVisualizerDims);
+			glBindVertexArray(fullscreenQuadVAO);
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 			glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE); // Treat as shadow texture
 		}
