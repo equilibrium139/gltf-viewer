@@ -177,3 +177,20 @@ Shader& GLTFResources::GetOrCreateDepthShader(VertexAttribute attributes, bool d
 	}
 	return depthShaders.back().second;
 }
+
+Shader& GLTFResources::GetOrCreateHighlightShader(VertexAttribute attributes)
+{
+	constexpr VertexAttribute highlightAttributes = VertexAttribute::POSITION | VertexAttribute::JOINTS | VertexAttribute::WEIGHTS | VertexAttribute::MORPH_TARGET0_POSITION;
+	VertexAttribute relevantAttributes = attributes & highlightAttributes;
+	for (auto& pair : highlightShaders)
+	{
+		VertexAttribute key = (pair.first & highlightAttributes);
+		if (relevantAttributes == key)
+		{
+			return pair.second;
+		}
+	}
+	auto defines = GetShaderDefines(relevantAttributes, false);
+	highlightShaders.push_back({ relevantAttributes, Shader("Shaders/transform.vert", "Shaders/highlight.frag", nullptr, defines) });
+	return highlightShaders.back().second;
+}

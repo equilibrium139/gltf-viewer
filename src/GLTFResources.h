@@ -21,6 +21,7 @@ struct GLTFResources
 	std::vector<std::pair<ShaderKey, Shader>> shaders;
 	using DepthShaderKey = std::pair<VertexAttribute, bool>; // bool = depth cubemap (for point lights)
 	std::vector<std::pair<DepthShaderKey, Shader>> depthShaders;
+	std::vector<std::pair<VertexAttribute, Shader>> highlightShaders;
 	std::vector<Texture> textures;
 	std::vector<PBRMaterial> materials;
 	// TODO: probably should make these global, these aren't specific to each scene
@@ -33,4 +34,5 @@ struct GLTFResources
 
 	Shader& GetOrCreateShader(VertexAttribute attributes, bool flatShading);
 	Shader& GetOrCreateDepthShader(VertexAttribute attributes, bool depthCubemap);
+	Shader& GetOrCreateHighlightShader(VertexAttribute attributes);
 };

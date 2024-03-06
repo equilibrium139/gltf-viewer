@@ -1470,13 +1470,15 @@ void Scene::HighlightEntityHierarchy(int entityIdx, const glm::mat4& viewProj)
 {
 	const Entity& entity = entities[entityIdx];
 	glm::mat4 mvp = viewProj * globalTransforms[entityIdx];
-	highlightShader.use();
-	highlightShader.SetMat4("transform", glm::value_ptr(mvp));
 	if (entity.meshIdx >= 0)
 	{
 		const Mesh& mesh = resources.meshes[entity.meshIdx];
 		for (const Submesh& submesh : mesh.submeshes)
 		{
+			Shader& highlightShader = resources.GetOrCreateHighlightShader(submesh.flags);
+			highlightShader.use();
+			highlightShader.SetMat4("transform", glm::value_ptr(mvp));
+
 			if (entity.skeletonIdx >= 0)
 			{
 				auto skinningMatrices = ComputeSkinningMatrices(skeletons[entity.skeletonIdx], entities);
